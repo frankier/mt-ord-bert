@@ -1,6 +1,6 @@
 import argparse
-from os import makedirs
-from os.path import join as pjoin
+from os import makedirs, listdir
+from os.path import join as pjoin, isdir
 import json
 
 
@@ -8,25 +8,15 @@ MODELS = ["class", "fwd_cumulative", "fwd_sratio", "bwd_cratio", "fwd_acat"]
 DATASETS = ["multiscale_rt_critics"]
 
 
-WARM_TMPL = {
-    "output_dir": "/dev/null",
-    "warm_dataset_cache": True,
-    "num_dataset_proc": 1
-}
-
-
 JOB_TMPL = {
-    #"output_dir": "multiscale_rt_critics_output",
-    #"dataset": "multiscale_rt_critics",
-    "logging_strategy": "epoch",
-    "warmup_ratio": 0.1,
+    "warmup_ratio": 0.33,
     "learning_rate": 1e-5,
     "lr_scheduler_type": "linear",
-    "num_train_epochs": 1,
+    "max_steps": 3000,
     "evaluation_strategy": "steps",
     "logging_strategy": "steps",
-    "eval_steps": 500,
-    "save_steps": 500,
+    "eval_steps": 100,
+    "save_steps": 100,
     "report_to": "tensorboard",
     "dataloader_num_workers": 8,
     "per_device_train_batch_size": 32,
@@ -37,8 +27,9 @@ JOB_TMPL = {
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--data-root", help="The input directory for the datasets")
     parser.add_argument("--jsons-out", help="The output directory for the JSONs")
-    parser.add_argument("--out-root", help="The output directory for training")
+    parser.add_argument("--log-root", help="The output directory for training logs and checkpoints")
     return parser.parse_args()
 
 
@@ -50,24 +41,20 @@ def dump_json(obj, filename):
 def main():
     args = parse_args()
     makedirs(args.jsons_out, exist_ok=True)
-    for dataset in DATASETS:
-        dump_json(
-            {
-                **WARM_TMPL,
-                "dataset": dataset,
-            },
-            pjoin(args.jsons_out, f"_warm_{dataset}.json")
-        )
+    for dataset in listdir(args.data_root):
+        dataset_dir = pjoin(args.data_root, dataset)
+        if not isdir(dataset_dir):
+            continue
         for model in MODELS:
             comb = f"{dataset}_{model}"
-            output_dir = pjoin(args.out_root, comb)
-            makedirs(output_dir, exist_ok=True)
+            log_dir = pjoin(args.log_root, comb)
+            makedirs(log_dir, exist_ok=True)
             dump_json(
                 {
                     **JOB_TMPL,
-                    "dataset": dataset,
+                    "dataset": dataset_dir,
                     "model": model,
-                    "output_dir": output_dir,
+                    "output_dir": log_dir,
                 },
                 pjoin(args.jsons_out, f"{comb}.json")
             )

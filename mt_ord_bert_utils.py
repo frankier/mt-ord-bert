@@ -1,7 +1,6 @@
 from transformers import AutoTokenizer
 
 
-
 _tokenizer = None
 
 

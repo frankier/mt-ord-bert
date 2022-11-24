@@ -32,7 +32,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 def load_from_disk(dir):
-    dataset = datasets.DatasetDict.load_from_disk(dir)
+    dataset = datasets.DatasetDict.load_from_disk(dir, keep_in_memory=False)
     num_labels = pickle.load(open(pjoin(dir, "num_labels.pkl"), "rb"))
     return dataset, num_labels
 
@@ -44,7 +44,7 @@ class ExtraArguments:
     threads: Optional[int] = None
     trace_labels_predictions: bool = False
     num_dataset_proc: Optional[int] = None
-    warm_dataset_cache: bool = False
+    smoke: bool = False
 
 
 def main():
@@ -72,11 +72,17 @@ def main():
             f"Warning: multi-scale datasets such as {args.dataset} are not support with torch < 1.13",
             file=sys.stderr,
         )
+    
+    if args.smoke:
+        base_model = "prajjwal1/bert-tiny"
+        torch.set_num_threads(1)
+    else:
+        base_model = "bert-base-cased"
 
     if args.model == "class":
         from bert_ordinal.baseline_models.classification import BertForMultiScaleSequenceClassification
         model = BertForMultiScaleSequenceClassification.from_pretrained(
-            "bert-base-cased", num_labels=num_labels
+            base_model, num_labels=num_labels
         )
 
         def proc_logits(logits):
@@ -84,7 +90,7 @@ def main():
     elif args.model in link_registry:
         from bert_ordinal import BertForMultiScaleOrdinalRegression
         model = BertForMultiScaleOrdinalRegression.from_pretrained(
-            "bert-base-cased", num_labels=num_labels, link=args.model
+            base_model, num_labels=num_labels, link=args.model
         )
         link = model.link
 

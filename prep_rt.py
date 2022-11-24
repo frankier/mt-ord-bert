@@ -2,7 +2,7 @@ import sys
 import pickle
 from os.path import join as pjoin
 from bert_ordinal.datasets import load_data
-from .mt_ord_bert_utils import tokenize
+from mt_ord_bert_utils import tokenize
 
 
 dataset, num_labels, _ = load_data(
