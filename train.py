@@ -3,7 +3,10 @@ import os
 import sys
 from dataclasses import dataclass
 from typing import Optional
+from os.path import join as pjoin
 
+import datasets
+import pickle
 import evaluate
 import numpy as np
 import torch
@@ -28,6 +31,12 @@ metric_mse = evaluate.load("mse")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
+def load_from_disk(dir):
+    dataset = datasets.DatasetDict.load_from_disk(dir)
+    num_labels = pickle.load(open(pjoin(dir, "num_labels.pkl"), "rb"))
+    return dataset, num_labels
+
+
 @dataclass
 class ExtraArguments:
     dataset: str
@@ -36,21 +45,6 @@ class ExtraArguments:
     trace_labels_predictions: bool = False
     num_dataset_proc: Optional[int] = None
     warm_dataset_cache: bool = False
-
-
-_tokenizer = None
-
-
-def get_tokenizer():
-    global _tokenizer
-    if _tokenizer is None:
-        _tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-    return _tokenizer
-
-
-def tokenize(text):
-    tokenizer = get_tokenizer()
-    return tokenizer(text, padding="max_length", truncation=True, return_tensors="np")
 
 
 def main():
@@ -69,19 +63,7 @@ def main():
     if args.threads:
         torch.set_num_threads(args.threads)
 
-    dataset, num_labels, _ = load_data(
-        args.dataset, num_dataset_proc=args.num_dataset_proc
-    )
-    dataset = dataset.map(
-        tokenize,
-        input_columns="text",
-        batched=True,
-        desc="Tokenizing",
-        num_proc=args.num_dataset_proc,
-    )
-    if args.warm_dataset_cache:
-        print("Dataset cache warmed")
-        return
+    dataset, num_labels = load_from_disk(args.dataset)
 
     import packaging.version
 

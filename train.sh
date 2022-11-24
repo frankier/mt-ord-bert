@@ -4,14 +4,6 @@ IFS=$'\n\t'
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-for conf in $1/_*.json; do
-
-echo "Warming $conf"
-
-./cpre/bin/python $SCRIPT_DIR/train.py $conf
-
-done
-
 for conf in $1/*.json; do
 
 if  [[ $(basename $conf) == _* ]] ;
