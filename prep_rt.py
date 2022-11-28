@@ -1,7 +1,5 @@
 import sys
-import pickle
-from os.path import join as pjoin
-from bert_ordinal.datasets import load_data
+from bert_ordinal.datasets import load_data, save_to_disk_with_labels
 from mt_ord_bert_utils import tokenize
 
 
@@ -15,5 +13,4 @@ dataset = dataset.map(
     desc="Tokenizing",
     num_proc=8,
 )
-dataset.save_to_disk(sys.argv[1])
-pickle.dump(num_labels, open(pjoin(sys.argv[1], "num_labels.pkl"), "wb"))
+save_to_disk_with_labels(sys.argv[1], dataset, num_labels)
