@@ -28,6 +28,12 @@ metric_mse = evaluate.load("mse")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
+# Begin W&B
+import wandb
+wandb.init(project="mt-ord-bert", entity="frobertson")
+# WEnd &B
+
+
 @dataclass
 class ExtraArguments:
     dataset: str

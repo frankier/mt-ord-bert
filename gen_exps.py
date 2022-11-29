@@ -37,7 +37,7 @@ JOB_TMPL = {
     "logging_strategy": "steps",
     "eval_steps": 100,
     "save_steps": 100,
-    "report_to": "tensorboard",
+    "report_to": "wandb",
     "dataloader_num_workers": 8,
     "per_device_train_batch_size": 32,
     "per_device_eval_batch_size": 32,
