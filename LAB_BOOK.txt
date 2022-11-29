@@ -1,0 +1,9 @@
+link_rt_exp_results.goodclass.nodiscrim contains a run 
+
+2022-11-29 9:30
+Starting a run which
+ * Logs to W&B
+ * Misses out class since this was fairly successful already last time and has no tweaks
+ * Everything else gets a run with per_task and multi discrimination
+   * Previously everything was run with single discrimination which is probably pretty much useless/wrong
+
