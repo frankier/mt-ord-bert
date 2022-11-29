@@ -73,7 +73,7 @@ def main():
                 {
                     **JOB_TMPL,
                     "dataset": dataset_dir,
-                    "model": model.link,
+                    "model": model_config.link,
                     "output_dir": log_dir,
                 },
                 pjoin(args.jsons_out, f"{comb_name}.json")
