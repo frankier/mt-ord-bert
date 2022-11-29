@@ -4,12 +4,7 @@ IFS=$'\n\t'
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-for conf in $1/*.json; do
-
-if  [[ $(basename $conf) == _* ]] ;
-then
-    continue
-fi
+for conf in "$@"; do
 
 echo "Submitting $conf"
 
