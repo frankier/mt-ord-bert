@@ -1,4 +1,3 @@
-import argparse
 import os
 import sys
 from dataclasses import dataclass
@@ -14,9 +13,9 @@ from pprint import pprint
 
 from bert_ordinal import Trainer
 from bert_ordinal.datasets import load_from_disk_with_labels
-from bert_ordinal.eval import qwk_multi_norm, eval_preds
+from bert_ordinal.eval import evaluate_pred_dist_avgs
 from bert_ordinal.element_link import link_registry
-from bert_ordinal.label_dist import summarize_label_dist, PRED_AVGS
+from bert_ordinal.label_dist import summarize_label_dist
 
 
 metric_accuracy = evaluate.load("accuracy")
@@ -125,11 +124,7 @@ def main():
             print("predictions")
             pprint(pred_label_dists)
 
-        res = {}
-        for avg in PRED_AVGS:
-            for k, v in eval_preds(pred_label_dists[avg], labels, batch_num_labels).items():
-                res[f"{avg}_{k}"] = v
-        return res
+        return evaluate_pred_dist_avgs(pred_label_dists, label_names, batch_num_labels)
 
     print("")
     print(
