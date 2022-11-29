@@ -3,6 +3,10 @@
 This is the dataset/experiment specific code for running training and evaluation
 of the ordinal regression NLP models.
 
+## Installation
+
+A tyykyy/mahti Conda yaml is in `env.yml`.
+
 ## How to run it
 
 ### Step 1) Prepare the datasets
