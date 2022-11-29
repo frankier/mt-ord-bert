@@ -1,4 +1,7 @@
-link_rt_exp_results.goodclass.nodiscrim contains a run 
+link_rt_exp_results.goodclass.nodiscrim contains a run with:
+ * A good classifier run
+ * Everything else with single discrimination (bad)
+ * SLURM logs in link_rt_exp_results.goodclass.nodiscrim/logs
 
 2022-11-29 9:30
 Starting a run which
