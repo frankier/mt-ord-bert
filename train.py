@@ -3,24 +3,21 @@ import os
 import sys
 from dataclasses import dataclass
 from typing import Optional
-from os.path import join as pjoin
-
-import datasets
-import pickle
 import evaluate
 import numpy as np
 import torch
 from transformers import (
-    AutoTokenizer,
-    BertForSequenceClassification,
     HfArgumentParser,
     TrainingArguments,
 )
+from pprint import pprint
 
-from bert_ordinal import BertForOrdinalRegression, Trainer, ordinal_decode_labels_pt
-from bert_ordinal.datasets import load_data
-from bert_ordinal.eval import qwk, qwk_multi_norm
+from bert_ordinal import Trainer
+from bert_ordinal.datasets import load_from_disk_with_labels
+from bert_ordinal.eval import qwk_multi_norm, eval_preds
 from bert_ordinal.element_link import link_registry
+from bert_ordinal.label_dist import summarize_label_dist, PRED_AVGS
+
 
 metric_accuracy = evaluate.load("accuracy")
 metric_mae = evaluate.load("mae")
@@ -31,16 +28,11 @@ metric_mse = evaluate.load("mse")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-def load_from_disk(dir):
-    dataset = datasets.DatasetDict.load_from_disk(dir, keep_in_memory=False)
-    num_labels = pickle.load(open(pjoin(dir, "num_labels.pkl"), "rb"))
-    return dataset, num_labels
-
-
 @dataclass
 class ExtraArguments:
     dataset: str
     model: str = None
+    discrimination_mode: str = "per_task"
     threads: Optional[int] = None
     trace_labels_predictions: bool = False
     num_dataset_proc: Optional[int] = None
@@ -63,7 +55,7 @@ def main():
     if args.threads:
         torch.set_num_threads(args.threads)
 
-    dataset, num_labels = load_from_disk(args.dataset)
+    dataset, num_labels = load_from_disk_with_labels(args.dataset)
 
     import packaging.version
 
@@ -86,7 +78,11 @@ def main():
         )
 
         def proc_logits(logits):
-            return logits.argmax(dim=-1)
+            label_dists = logits.softmax(dim=-1)
+            return {
+                "label_dists": label_dists,
+                **summarize_label_dist(label_dists),
+            }
     elif args.model in link_registry:
         from bert_ordinal import BertForMultiScaleOrdinalRegression
         model = BertForMultiScaleOrdinalRegression.from_pretrained(
@@ -95,7 +91,11 @@ def main():
         link = model.link
 
         def proc_logits(logits):
-            return torch.hstack([link.top_from_logits(li) for li in logits[1].unbind()])
+            label_dists = torch.hstack([link.label_dist_from_logits(li) for li in logits[1].unbind()])
+            return {
+                "label_dists": label_dists,
+                **summarize_label_dist(label_dists),
+            }
     else:
         print(f"Unknown model type {args.model}", file=sys.stderr)
         sys.exit(-1)
@@ -106,7 +106,7 @@ def main():
     training_args.optim = "adamw_torch"
 
     def compute_metrics(eval_pred):
-        predictions, labels = eval_pred
+        pred_label_dists, labels = eval_pred
         labels, task_ids = labels
         batch_num_labels = np.empty(len(task_ids), dtype=np.int32)
         for idx, task_id in enumerate(task_ids):
@@ -116,16 +116,13 @@ def main():
             print()
             print("Computing metrics based upon")
             print("labels", labels)
-            print("predictions", predictions)
+            print("predictions")
+            pprint(pred_label_dists)
 
-        mse = metric_mse.compute(predictions=predictions, references=labels)
-        res = {
-            **metric_accuracy.compute(predictions=predictions, references=labels),
-            **metric_mae.compute(predictions=predictions, references=labels),
-            **mse,
-            "rmse": (mse["mse"]) ** 0.5,
-        }
-        res["qwk"] = qwk_multi_norm(predictions, labels, batch_num_labels)
+        res = {}
+        for avg in PRED_AVGS:
+            for k, v in eval_preds(pred_label_dists[avg], labels, batch_num_labels).items():
+                res[f"{avg}_{k}"] = v
         return res
 
     print("")

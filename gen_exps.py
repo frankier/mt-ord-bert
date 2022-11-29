@@ -1,11 +1,31 @@
 import argparse
+from dataclasses import dataclass
 from os import makedirs, listdir
 from os.path import join as pjoin, isdir
+from typing import Optional
 import json
 
 
-MODELS = ["class", "fwd_cumulative", "fwd_sratio", "bwd_cratio", "fwd_acat"]
-DATASETS = ["multiscale_rt_critics"]
+@dataclass
+class ModelConfig:
+    link: str
+    discrimination_mode: Optional[str] = None
+
+    def name(self):
+        if self.discrimination_mode:
+            return f"{self.link}_{self.discrimination_mode}"
+        else:
+            return self.link
+
+
+MODELS = [
+    ModelConfig("class"),
+    *(
+        ModelConfig(link, discrimination_mode)
+        for link in ("fwd_cumulative", "fwd_sratio", "bwd_cratio", "fwd_acat")
+        for discrimination_mode in ("per_task", "multi")
+    )
+]
 
 
 JOB_TMPL = {
@@ -45,18 +65,18 @@ def main():
         dataset_dir = pjoin(args.data_root, dataset)
         if not isdir(dataset_dir):
             continue
-        for model in MODELS:
-            comb = f"{dataset}_{model}"
-            log_dir = pjoin(args.log_root, comb)
+        for model_config in MODELS:
+            comb_name = f"{dataset}_{model_config.name()}"
+            log_dir = pjoin(args.log_root, comb_name)
             makedirs(log_dir, exist_ok=True)
             dump_json(
                 {
                     **JOB_TMPL,
                     "dataset": dataset_dir,
-                    "model": model,
+                    "model": model.link,
                     "output_dir": log_dir,
                 },
-                pjoin(args.jsons_out, f"{comb}.json")
+                pjoin(args.jsons_out, f"{comb_name}.json")
             )
 
 if __name__ == "__main__":
