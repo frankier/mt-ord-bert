@@ -15,7 +15,7 @@ from bert_ordinal import Trainer
 from bert_ordinal.datasets import load_from_disk_with_labels
 from bert_ordinal.eval import evaluate_pred_dist_avgs
 from bert_ordinal.element_link import link_registry
-from bert_ordinal.label_dist import summarize_label_dist
+from bert_ordinal.label_dist import PRED_AVGS, summarize_label_dists
 
 
 metric_accuracy = evaluate.load("accuracy")
@@ -91,10 +91,10 @@ def main():
 
         def proc_logits(logits):
             label_dists = logits.softmax(dim=-1)
-            return {
-                "label_dists": label_dists,
-                **summarize_label_dist(label_dists),
-            }
+            return (
+                label_dists,
+                *summarize_label_dists(label_dists).values(),
+            )
     elif args.model in link_registry:
         from bert_ordinal import BertForMultiScaleOrdinalRegression
         model = BertForMultiScaleOrdinalRegression.from_pretrained(
@@ -103,11 +103,11 @@ def main():
         link = model.link
 
         def proc_logits(logits):
-            label_dists = torch.hstack([link.label_dist_from_logits(li) for li in logits[1].unbind()])
-            return {
-                "label_dists": label_dists,
-                **summarize_label_dist(label_dists),
-            }
+            label_dists = [link.label_dist_from_logits(li) for li in logits[1].unbind()]
+            return (
+                label_dists,
+                *summarize_label_dists(label_dists).values(),
+            )
     else:
         print(f"Unknown model type {args.model}", file=sys.stderr)
         sys.exit(-1)
@@ -132,7 +132,7 @@ def main():
             print("predictions")
             pprint(pred_label_dists)
 
-        return evaluate_pred_dist_avgs(pred_label_dists, label_names, batch_num_labels)
+        return evaluate_pred_dist_avgs(dict(zip(PRED_AVGS, pred_label_dists[1:])), labels, batch_num_labels)
 
     print("")
     print(
