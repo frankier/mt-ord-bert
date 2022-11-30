@@ -127,7 +127,8 @@ def main():
         if args.trace_labels_predictions:
             print()
             print("Computing metrics based upon")
-            print("labels", labels)
+            print("labels")
+            print(labels)
             print("predictions")
             pprint(pred_label_dists)
 
