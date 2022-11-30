@@ -10,3 +10,18 @@ Starting a run which
  * Everything else gets a run with per_task and multi discrimination
    * Previously everything was run with single discrimination which is probably pretty much useless/wrong
 
+16:04 start again: only add_discrims.22112910/jsons/rt_fwd_cumulative_per_task.json
+17:38 again
+21:08 again
+23:43 again
+2022-11-30 9:00 again: seems to be training now
+
+2022-11-30 9:50:
+It looks like the boundaries have not been being learnt because of a method
+which doesn't propagate gradients which probably explains the lousy performance
+
+10:00 Starting training of:
+rungroup__fix_thresholds.22113010/jsons/rt_fwd_acat_*.json
+rungroup__fix_thresholds.22113010/jsons/rt_fwd_cumulative_*.json
+
+11:30 Got allocation
