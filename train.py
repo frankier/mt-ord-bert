@@ -36,6 +36,7 @@ wandb.init(project="mt-ord-bert", entity="frobertson")
 @dataclass
 class ExtraArguments:
     dataset: str
+    num_samples: Optional[int] = None
     model: str = None
     discrimination_mode: str = "per_task"
     threads: Optional[int] = None
@@ -61,6 +62,12 @@ def main():
         torch.set_num_threads(args.threads)
 
     dataset, num_labels = load_from_disk_with_labels(args.dataset)
+
+    if args.num_samples is not None:
+        for label in ("train", "test"):
+            dataset[label] = (
+                dataset[label].shuffle(seed=42).select(range(args.num_samples))
+            )
 
     import packaging.version
 
