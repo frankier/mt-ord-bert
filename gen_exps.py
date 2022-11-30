@@ -36,6 +36,7 @@ JOB_TMPL = {
     "evaluation_strategy": "steps",
     "logging_strategy": "steps",
     "eval_steps": 100,
+    "logging_steps": 100,
     "save_steps": 100,
     "report_to": "wandb",
     "dataloader_num_workers": 8,
