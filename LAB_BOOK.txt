@@ -25,3 +25,15 @@ rungroup__fix_thresholds.22113010/jsons/rt_fwd_acat_*.json
 rungroup__fix_thresholds.22113010/jsons/rt_fwd_cumulative_*.json
 
 11:30 Got allocation
+
+Later:
+It looks like what's happening is that the boundaries are still not being
+learnt well. It may be that each group gets too little "air time".
+
+2022-12-01 12:00
+Starting a run with just the biggest group. Calling this dataset rt_one. This should help figure out for sure whether the problem is the multi-task setting (I think it is).
+
+Beforehand I also reparameterised the affine layer to be discrimination * input
++ offsets rather than discrimination * (input + offsets) meaning the true
+offsets are offsets / discrimination. Hopefully this is easier to learn (now it
+is the same as a standard linear).
