@@ -15,7 +15,7 @@ from bert_ordinal import Trainer
 from bert_ordinal.datasets import load_from_disk_with_labels
 from bert_ordinal.eval import evaluate_pred_dist_avgs
 from bert_ordinal.element_link import link_registry
-from bert_ordinal.label_dist import PRED_AVGS, summarize_label_dists
+from bert_ordinal.label_dist import PRED_AVGS, summarize_label_dists, summarize_label_dist
 
 
 metric_accuracy = evaluate.load("accuracy")
@@ -83,46 +83,79 @@ def main():
     else:
         base_model = "bert-base-cased"
 
-    if args.model == "class":
-        from bert_ordinal.baseline_models.classification import BertForMultiScaleSequenceClassification
-        model = BertForMultiScaleSequenceClassification.from_pretrained(
-            base_model, num_labels=num_labels
-        )
-
-        def proc_logits(logits):
-            label_dists = logits.softmax(dim=-1)
-            return (
-                label_dists,
-                *summarize_label_dists(label_dists).values(),
+    if isinstance(num_labels, int):
+        label_names = ["labels"]
+        if args.model == "class":
+            from transformers import BertForSequenceClassification
+            model = BertForSequenceClassification.from_pretrained(
+                base_model, num_labels=num_labels
             )
-    elif args.model in link_registry:
-        from bert_ordinal import BertForMultiScaleOrdinalRegression
-        model = BertForMultiScaleOrdinalRegression.from_pretrained(
-            base_model, num_labels=num_labels, link=args.model
-        )
-        link = model.link
 
-        def proc_logits(logits):
-            label_dists = [link.label_dist_from_logits(li) for li in logits[1].unbind()]
-            return (
-                label_dists,
-                *summarize_label_dists(label_dists).values(),
+            def proc_logits(logits):
+                label_dist = logits.softmax(dim=-1)
+                return (
+                    label_dist,
+                    *summarize_label_dist(label_dist).values()
+                )
+        elif args.model in link_registry:
+            from bert_ordinal import BertForOrdinalRegression
+            model = BertForOrdinalRegression.from_pretrained(
+                base_model, num_labels=num_labels, link=args.model
             )
+            link = model.link
+
+            def proc_logits(logits):
+                label_dist = link.label_dist_from_logits(logits[1])
+                return (
+                    label_dist,
+                    *summarize_label_dist(label_dist).values()
+                )
+        else:
+            print(f"Unknown model type {args.model}", file=sys.stderr)
+            sys.exit(-1)
     else:
-        print(f"Unknown model type {args.model}", file=sys.stderr)
-        sys.exit(-1)
+        label_names = ["labels", "task_ids"]
+        if args.model == "class":
+            from bert_ordinal.baseline_models.classification import BertForMultiScaleSequenceClassification
+            model = BertForMultiScaleSequenceClassification.from_pretrained(
+                base_model, num_labels=num_labels
+            )
 
-    label_names = ["labels", "task_ids"]
+            def proc_logits(logits):
+                label_dists = logits.softmax(dim=-1)
+                return (
+                    label_dists,
+                    *summarize_label_dists(label_dists).values(),
+                )
+        elif args.model in link_registry:
+            from bert_ordinal import BertForMultiScaleOrdinalRegression
+            model = BertForMultiScaleOrdinalRegression.from_pretrained(
+                base_model, num_labels=num_labels, link=args.model
+            )
+            link = model.link
+
+            def proc_logits(logits):
+                label_dists = [link.label_dist_from_logits(li) for li in logits[1].unbind()]
+                return (
+                    label_dists,
+                    *summarize_label_dists(label_dists).values(),
+                )
+        else:
+            print(f"Unknown model type {args.model}", file=sys.stderr)
+            sys.exit(-1)
 
     training_args.label_names = label_names
     training_args.optim = "adamw_torch"
 
     def compute_metrics(eval_pred):
         pred_label_dists, labels = eval_pred
-        labels, task_ids = labels
-        batch_num_labels = np.empty(len(task_ids), dtype=np.int32)
-        for idx, task_id in enumerate(task_ids):
-            batch_num_labels[idx] = num_labels[task_id]
+        if len(label_names) == 2:
+            labels, task_ids = labels
+            batch_num_labels = np.empty(len(task_ids), dtype=np.int32)
+            for idx, task_id in enumerate(task_ids):
+                batch_num_labels[idx] = num_labels[task_id]
+        else:
+            batch_num_labels = torch.tensor([num_labels]).repeat(len(labels))
 
         if args.trace_labels_predictions:
             print()
