@@ -31,9 +31,21 @@ It looks like what's happening is that the boundaries are still not being
 learnt well. It may be that each group gets too little "air time".
 
 2022-12-01 12:00
-Starting a run with just the biggest group. Calling this dataset rt_one. This should help figure out for sure whether the problem is the multi-task setting (I think it is).
+Starting a run with just the biggest group (ds:rt1). Calling this dataset rt_one. This should help figure out for sure whether the problem is the multi-task setting (I think it is).
 
 Beforehand I also reparameterised the affine layer to be discrimination * input
 + offsets rather than discrimination * (input + offsets) meaning the true
 offsets are offsets / discrimination. Hopefully this is easier to learn (now it
 is the same as a standard linear).
+
+16:50
+Starting again after hopefully fixing a couple of bugs
+
+2022-12-02 7:30
+Some more bugs in the single group version found. Trying to fix them.
+
+9:00: Schedule another run on the rt1 ds with fwd_acat, fwd_cumulative and class.
+
+12:45: Looking at the results, fwd_acat seems broken. But fwd_cumulative and class
+do okay. I'm not clear if the schedule gives them enough time to learn
+properly e.g. would they benefit from more epochs. Quite possibly since there is less data.
