@@ -100,7 +100,7 @@ def main():
         elif args.model in link_registry:
             from bert_ordinal import BertForOrdinalRegression
             model = BertForOrdinalRegression.from_pretrained(
-                base_model, num_labels=num_labels, link=args.model
+                base_model, num_labels=num_labels, link=args.model, discrimination_mode=args.discrimination_mode
             )
             link = model.link
 
@@ -130,7 +130,7 @@ def main():
         elif args.model in link_registry:
             from bert_ordinal import BertForMultiScaleOrdinalRegression
             model = BertForMultiScaleOrdinalRegression.from_pretrained(
-                base_model, num_labels=num_labels, link=args.model
+                base_model, num_labels=num_labels, link=args.model, discrimination_mode=args.discrimination_mode
             )
             link = model.link
 
