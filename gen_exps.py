@@ -37,6 +37,7 @@ MODELS = {
         *(
             ModelConfig(link)
             for link in ("fwd_cumulative", "fwd_sratio", "bwd_cratio", "fwd_acat")
+            for discrimination_mode in ("none", "multi")
         )
     ]
 }
@@ -131,10 +132,7 @@ def main():
                 "model": model_config.link,
                 "output_dir": log_dir,
             }
-            if dataset == "rt_one":
-                config["discrimination_mode"] = "none"
-            else:
-                config["discrimination_mode"] = model_config.discrimination_mode,
+            config["discrimination_mode"] = model_config.discrimination_mode,
             dump_json(config, conf_json_path)
             if dataset == "rt_one":
                 time = "1:00:00"
