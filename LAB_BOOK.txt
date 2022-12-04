@@ -49,3 +49,11 @@ Some more bugs in the single group version found. Trying to fix them.
 12:45: Looking at the results, fwd_acat seems broken. But fwd_cumulative and class
 do okay. I'm not clear if the schedule gives them enough time to learn
 properly e.g. would they benefit from more epochs. Quite possibly since there is less data.
+
+2022-12-04
+16:40
+Trying rt40k with a higher learning rate of 2e-5 rather than 1e-5. Also using
+0.1 warmup ratio. There have been small improvements since the last time it was run and now everything is on w&b and we have a multiscale mae. Trying the following models: fwd_cumulative_per_task fwd_cumulative_multi & class.
+
+17:40
+It seems that everything currently still runs per_task, ignoring this part of the configuration. It has also been that the rt1 models are forced to run as discrimination_mode=none but they can actually have multi
