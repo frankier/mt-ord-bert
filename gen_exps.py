@@ -35,7 +35,7 @@ MODELS = {
     "rt_one": [
         ModelConfig("class"),
         *(
-            ModelConfig(link)
+            ModelConfig(link, discrimination_mode)
             for link in ("fwd_cumulative", "fwd_sratio", "bwd_cratio", "fwd_acat")
             for discrimination_mode in ("none", "multi")
         )
