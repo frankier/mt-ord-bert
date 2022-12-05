@@ -57,3 +57,7 @@ Trying rt40k with a higher learning rate of 2e-5 rather than 1e-5. Also using
 
 17:40
 It seems that everything currently still runs per_task, ignoring this part of the configuration. It has also been that the rt1 models are forced to run as discrimination_mode=none but they can actually have multi
+
+2022-12-04
+8:40
+Okay I think the discrimination_mode problem has now finally been fixed. Running rt_fwd_cumulative_multi.slurm and rt_one_fwd_cumulative_multi.slurm
