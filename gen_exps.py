@@ -132,7 +132,7 @@ def main():
                 "model": model_config.link,
                 "output_dir": log_dir,
             }
-            config["discrimination_mode"] = model_config.discrimination_mode,
+            config["discrimination_mode"] = model_config.discrimination_mode
             dump_json(config, conf_json_path)
             if dataset == "rt_one":
                 time = "1:00:00"
