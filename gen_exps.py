@@ -22,24 +22,29 @@ class ModelConfig:
         else:
             return self.link
 
+ALL_MUTISCALE_MODELS = [
+    ModelConfig("class"),
+    ModelConfig("regress"),
+    *(
+        ModelConfig(link, discrimination_mode)
+        for link in ("fwd_cumulative", "fwd_sratio", "bwd_cratio", "fwd_acat")
+        for discrimination_mode in ("per_task", "multi")
+    )
+]
+ALL_SINGLE_SCALE_MODELS = [
+    ModelConfig("class"),
+    ModelConfig("regress"),
+    *(
+        ModelConfig(link, discrimination_mode)
+        for link in ("fwd_cumulative", "fwd_sratio", "bwd_cratio", "fwd_acat")
+        for discrimination_mode in ("none", "multi")
+    )
+]
 
 MODELS = {
-    "rt": [
-        ModelConfig("class"),
-        *(
-            ModelConfig(link, discrimination_mode)
-            for link in ("fwd_cumulative", "fwd_sratio", "bwd_cratio", "fwd_acat")
-            for discrimination_mode in ("per_task", "multi")
-        )
-    ],
-    "rt_one": [
-        ModelConfig("class"),
-        *(
-            ModelConfig(link, discrimination_mode)
-            for link in ("fwd_cumulative", "fwd_sratio", "bwd_cratio", "fwd_acat")
-            for discrimination_mode in ("none", "multi")
-        )
-    ]
+    "rt": ALL_MUTISCALE_MODELS,
+    "rt_one": ALL_SINGLE_SCALE_MODELS,
+    "rt_irr5": ALL_MUTISCALE_MODELS,
 }
 
 JOB_TMPL = {
@@ -59,6 +64,15 @@ DATA_JOB_TMPL = {
         "learning_rate": 2e-5,
         "warmup_ratio": 0.1,
         "max_steps": 3000,
+        "eval_steps": 100,
+        "logging_steps": 100,
+        "save_steps": 100,
+    },
+    "rt_irr5": {
+        "lr_scheduler_type": "linear",
+        "learning_rate": 2e-5,
+        "warmup_ratio": 0.1,
+        "max_steps": 1500,
         "eval_steps": 100,
         "logging_steps": 100,
         "save_steps": 100,
@@ -134,7 +148,7 @@ def main():
             }
             config["discrimination_mode"] = model_config.discrimination_mode
             dump_json(config, conf_json_path)
-            if dataset == "rt_one":
+            if dataset in ("rt_one", "rt_irr5"):
                 time = "1:00:00"
             else:
                 time = "2:00:00"
