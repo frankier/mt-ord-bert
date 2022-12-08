@@ -13,9 +13,10 @@ from pprint import pprint
 
 from bert_ordinal import Trainer
 from bert_ordinal.datasets import load_from_disk_with_labels
-from bert_ordinal.eval import evaluate_pred_dist_avgs
+from bert_ordinal.eval import evaluate_pred_dist_avgs, evaluate_predictions
 from bert_ordinal.element_link import link_registry
 from bert_ordinal.label_dist import PRED_AVGS, summarize_label_dists, summarize_label_dist
+from bert_ordinal.transformers_utils import silence_warnings
 
 
 metric_accuracy = evaluate.load("accuracy")
@@ -97,6 +98,13 @@ def main():
                     label_dist,
                     *summarize_label_dist(label_dist).values()
                 )
+        elif args.model == "regress":
+            from transformers import BertForSequenceClassification
+            with silence_warnings():
+                model = BertForSequenceClassification.from_pretrained(
+                    base_model, num_labels=num_labels, problem_type="regression"
+                )
+            proc_logits = None
         elif args.model in link_registry:
             from bert_ordinal import BertForOrdinalRegression
             model = BertForOrdinalRegression.from_pretrained(
@@ -127,6 +135,16 @@ def main():
                     label_dists,
                     *summarize_label_dists(label_dists).values(),
                 )
+        elif args.model == "regress":
+            from bert_ordinal.baseline_models.regression import BertForMultiScaleSequenceRegression
+            with silence_warnings():
+                model = BertForMultiScaleSequenceRegression.from_pretrained(
+                    base_model, num_labels=num_labels
+                )
+            #model.init_scales_empirical(np.asarray(dataset["train"]["task_ids"]), np.asarray(dataset["train"]["label"]))
+            model.init_scales_range()
+            def proc_logits(logits):
+                return logits[0]
         elif args.model in link_registry:
             from bert_ordinal import BertForMultiScaleOrdinalRegression
             model = BertForMultiScaleOrdinalRegression.from_pretrained(
@@ -135,7 +153,7 @@ def main():
             link = model.link
 
             def proc_logits(logits):
-                label_dists = [link.label_dist_from_logits(li) for li in logits[1].unbind()]
+                label_dists = [link.label_dist_from_logits(li) for li in logits[0].unbind()]
                 return (
                     label_dists,
                     *summarize_label_dists(label_dists).values(),
@@ -165,7 +183,11 @@ def main():
             print("predictions")
             pprint(pred_label_dists)
 
-        return evaluate_pred_dist_avgs(dict(zip(PRED_AVGS, pred_label_dists[1:])), labels, batch_num_labels)
+        if args.model == "regress":
+            predictions = np.clip(pred_label_dists + 0.5, 0, batch_num_labels - 1).int()
+            return evaluate_predictions(predictions, labels, batch_num_labels)
+        else:
+            return evaluate_pred_dist_avgs(dict(zip(PRED_AVGS, pred_label_dists[1:])), labels, batch_num_labels)
 
     print("")
     print(
@@ -179,7 +201,7 @@ def main():
         train_dataset=dataset["train"],
         eval_dataset=dataset["test"],
         compute_metrics=compute_metrics,
-        preprocess_logits_for_metrics=lambda logits, _labels: proc_logits(logits),
+        preprocess_logits_for_metrics=None if proc_logits is None else lambda logits, _labels: proc_logits(logits)
     )
     trainer.train()
 
