@@ -61,3 +61,33 @@ It seems that everything currently still runs per_task, ignoring this part of th
 2022-12-04
 8:40
 Okay I think the discrimination_mode problem has now finally been fixed. Running rt_fwd_cumulative_multi.slurm and rt_one_fwd_cumulative_multi.slurm
+
+2022-12-06
+14:45
+
+I think the problem is the optimization of the cutoffs is counter to the BERT
+optimization. The analogy would be the way BatchNorm will not use running mean
+and variance statistics. Here the cutoff optimization is essentially trying to
+learn summary statistics of a hidden scale which is being learnt at the same
+time. One possibility then would be to re-estimate the cutoffs using only the
+mini-batch data. Another possibility would be to initialize with either
+MT-softmax or MS-linear. In the former case we can think about re-parameterising
+to be like the adjacent category model, and in the latter like the cumulative
+probability model. One interesting possibility is having softmax regression
+learnt with a single hidden linear and then reparameterising this, which would
+give an adjacent category model directly, without a need for further training.
+
+2022-12-07
+20:05
+
+I have made quite a few runs on a dataset made to show the benefit of the
+approach. The ones that work now are a new MS-linear model (aka regress) and
+MT-softmax (aka class). The dataset is comprised of 5 critics who have
+irregular rating patterns.
+
+22:05 Re-running jobs/rt_irr5_fwd_cumulative_per_task. It should be fixed now.
+
+2022-12-08
+
+8:30 Looks like jobs/rt_irr5_fwd_cumulative_per_task is in the same state for
+this dataset. I'm not sure exactly why the learning hasn't happened.
