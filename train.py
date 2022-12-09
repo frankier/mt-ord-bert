@@ -145,6 +145,18 @@ def main():
             model.init_scales_range()
             def proc_logits(logits):
                 return logits[0]
+        elif args.model == "latent_softmax":
+            from bert_ordinal.ordinal_models.experimental import BertForWithLatentAndSoftMax
+            with silence_warnings():
+                model = BertForWithLatentAndSoftMax.from_pretrained(
+                    base_model, num_labels=num_labels
+                )
+            def proc_logits(logits):
+                label_dists = logits[0].softmax(dim=-1)
+                return (
+                    label_dists,
+                    *summarize_label_dists(label_dists).values(),
+                )
         elif args.model in link_registry:
             from bert_ordinal import BertForMultiScaleOrdinalRegression
             model = BertForMultiScaleOrdinalRegression.from_pretrained(

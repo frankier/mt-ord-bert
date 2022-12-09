@@ -25,6 +25,7 @@ class ModelConfig:
 ALL_MUTISCALE_MODELS = [
     ModelConfig("class"),
     ModelConfig("regress"),
+    ModelConfig("latent_softmax"),
     *(
         ModelConfig(link, discrimination_mode)
         for link in ("fwd_cumulative", "fwd_sratio", "bwd_cratio", "fwd_acat")
