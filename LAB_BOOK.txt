@@ -91,3 +91,20 @@ irregular rating patterns.
 
 8:30 Looks like jobs/rt_irr5_fwd_cumulative_per_task is in the same state for
 this dataset. I'm not sure exactly why the learning hasn't happened.
+
+9:00 Starting latent_softmax, which is a softmax regression model with a shared
+latent scale.
+
+9:50 latent_softmax works less well than the explicitly ordinal
+parameterisations. This really confirms that the problem is the optimization of
+the cutoffs / task/scale specific parameters.
+
+10:20
+
+Okay. The agenda is: first get it working for a single group, then irr5. Here
+are some possible approaches:
+
+ * Train with linear or softmax first, then copy weights over to ordinal and
+   carry on training
+ * Better initialisation.
+ * Better diagnostics. How far exactly are the final cutoffs from their initialisation?
