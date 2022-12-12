@@ -19,6 +19,8 @@ def parse_args():
     parser.add_argument("dataset")
     parser.add_argument("--zero-bias", action="store_true")
     parser.add_argument("--range-init", action="store_true")
+    parser.add_argument("--std-pilot-init", action="store_true")
+    parser.add_argument("--pilot-samples", type=int, default=32)
     return parser.parse_args()
 
 
@@ -36,6 +38,8 @@ def main():
         model._zero_bias()
     if args.range_init:
         model.init_scales_range()
+    if args.std_pilot_init:
+        model.init_std_hidden_pilot(dataset["train"], args.pilot_samples, 1)
     logging.set_verbosity_warning()
     input_ids = torch.tensor(dataset["train"]["input_ids"])
     task_ids = torch.LongTensor(dataset["train"]["task_ids"]).unsqueeze(-1)
