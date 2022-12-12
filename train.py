@@ -44,6 +44,10 @@ class ExtraArguments:
     trace_labels_predictions: bool = False
     num_dataset_proc: Optional[int] = None
     smoke: bool = False
+    pilot_quantiles: bool = False
+    pilot_sample_size: int = 256
+    peak_class_prob: float = 0.5
+    dump_initial_model: Optional[str] = None
 
 
 def main():
@@ -215,6 +219,11 @@ def main():
         compute_metrics=compute_metrics,
         preprocess_logits_for_metrics=None if proc_logits is None else lambda logits, _labels: proc_logits(logits)
     )
+    if args.pilot_quantiles:
+        # We wait until after Trainer is initialised to make sure the model is on the GPU
+        model.pilot_quantile_init(dataset["train"], args.pilot_sample_size, training_args.per_device_train_batch_size, peak_class_prob=args.peak_class_prob)
+    if args.dump_initial_model is not None:
+        trainer.save_model(training_args.output_dir + "/" + args.dump_initial_model)
     trainer.train()
 
 
