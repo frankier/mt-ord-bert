@@ -108,3 +108,45 @@ are some possible approaches:
    carry on training
  * Better initialisation.
  * Better diagnostics. How far exactly are the final cutoffs from their initialisation?
+
+2020-12-12
+
+10:50
+
+I have made some runs with careful quantile initialisation. They show some
+promise but do not yet beat the MS-linear baseline. There have also been some
+problems getting the initailisation correct, including making sure the hidden
+linear is actually standarised.
+
+I have also switched to a slower 20 epoch schedule following
+
+Mosbach, M., Andriushchenko, M., & Klakow, D. (2020). On the Stability of
+Fine-tuning BERT: Misconceptions, Explanations, and Strong Baselines. ArXiv,
+abs/2006.04884.
+
+Generally the accuracy curves on the development set have been really noisy. I
+think this means the learning rate might be a bit too high. However, the
+quantile initialisation has a parameter about how much probability each class
+should get. Initially this was probably a bit too high, 0.8. I have now set
+this to 0.5. Part of the noisiness may come from bad learning from the bad
+initalisation resulting in very high loss rates at the beginning. 
+
+All in all this has not really worked. This seems like a bit of a dead end.
+Without either fitting some kind of fittable model first, and then fitting an
+ordinal model so as to get better initialisation, or turning to meta-learning
+its not clear what can be done better. Perhaps sufficient parameter turning
+would lead to a more stable learning process, but it's certainly not clear at
+the moment.
+
+2020-12-13
+
+9:00
+
+I think the losses for misclassification might be a bit too big. I am switching
+to a non-statistically modelled threshold model with hinge losses. See:
+
+https://home.ttic.edu/~nati/Publications/RennieSrebroIJCAI05.pdf
+
+This is a bit like a cross between the regression model and the ordinal
+regression model. Hopefully this will at least provide a starting point for
+further investigation.
