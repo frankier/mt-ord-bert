@@ -116,6 +116,8 @@ HF_DATASETS_CACHE=$$LOCAL_SCRATCH/hf_datasets \
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset", help="Only generate for one or more datasets", nargs='+')
+    parser.add_argument("--model", help="Only generate for one or more models", nargs='+')
     parser.add_argument("--data-root", help="The input directory for the datasets")
     parser.add_argument("--out", help="The output directory")
     return parser.parse_args()
@@ -134,10 +136,14 @@ def main():
         dirs[out_dir] = pjoin(args.out, out_dir)
         makedirs(pjoin(args.out, out_dir), exist_ok=True)
     for dataset in listdir(args.data_root):
+        if args.dataset and dataset not in args.dataset:
+            continue
         dataset_dir = pjoin(args.data_root, dataset)
         if not isdir(dataset_dir):
             continue
         for model_config in MODELS[dataset]:
+            if args.model and model_config.name() not in args.model:
+                continue
             comb_name = f"{dataset}_{model_config.name()}"
             log_dir = pjoin(dirs["results"], comb_name)
             makedirs(log_dir, exist_ok=True)
