@@ -174,3 +174,9 @@ towards an adjacent category model.
 I have implemented a version of the threshold model with fixed thresholds based
 on the label distribution the training dataset, but that allows learnable
 per-task linears as with MS-linear. I will run this one next.
+
+15:45
+
+That did not work at all. No idea why. The initial loss was kind of low so I
+tried increasing the learning rate to 1e-4, but it didn't work. Both threshold
+models could do with revisiting.
