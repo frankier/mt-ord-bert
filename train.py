@@ -169,6 +169,14 @@ def main():
                 )
             def proc_logits(logits):
                 return logits[0]
+        elif args.model == "fixed_threshold":
+            from bert_ordinal.ordinal_models.experimental import BertForMultiScaleFixedThresholdRegression
+            with silence_warnings():
+                model = BertForMultiScaleFixedThresholdRegression.from_pretrained(
+                    base_model, num_labels=num_labels
+                )
+            def proc_logits(logits):
+                return logits[0]
         elif args.model in link_registry:
             from bert_ordinal import BertForMultiScaleOrdinalRegression
             model = BertForMultiScaleOrdinalRegression.from_pretrained(
@@ -207,8 +215,11 @@ def main():
             print("predictions")
             pprint(pred_label_dists)
 
-        if args.model in ("regress", "threshold"):
-            predictions = np.clip(pred_label_dists + 0.5, 0, batch_num_labels - 1).astype(int)
+        if args.model in ("regress", "threshold", "fixed_threshold"):
+            if args.model == "regress":
+                predictions = np.clip(pred_label_dists + 0.5, 0, batch_num_labels - 1).astype(int)
+            else:
+                predictions = pred_label_dists
             return evaluate_predictions(predictions, labels, batch_num_labels)
         else:
             return evaluate_pred_dist_avgs(dict(zip(PRED_AVGS, pred_label_dists[1:])), labels, batch_num_labels)
@@ -233,6 +244,8 @@ def main():
             model.pilot_quantile_init(dataset["train"], args.pilot_sample_size, training_args.per_device_train_batch_size)
         else:
             model.pilot_quantile_init(dataset["train"], args.pilot_sample_size, training_args.per_device_train_batch_size, peak_class_prob=args.peak_class_prob)
+    if args.model == "fixed_threshold":
+        model.quantile_init(dataset["train"])
     if args.dump_initial_model is not None:
         trainer.save_model(training_args.output_dir + "/" + args.dump_initial_model)
     trainer.train()
