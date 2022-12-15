@@ -217,7 +217,7 @@ def main():
 
         if args.model in ("regress", "threshold", "fixed_threshold"):
             if args.model == "regress":
-                predictions = np.clip(pred_label_dists + 0.5, 0, batch_num_labels - 1).astype(int)
+                predictions = np.clip(pred_label_dists.squeeze(-1) + 0.5, 0, batch_num_labels - 1).astype(int)
             else:
                 predictions = pred_label_dists
             return evaluate_predictions(predictions, labels, batch_num_labels)
