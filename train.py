@@ -48,6 +48,7 @@ class ExtraArguments:
     pilot_sample_size: int = 256
     peak_class_prob: float = 0.5
     dump_initial_model: Optional[str] = None
+    fitted_ordinal: Optional[str] = None
 
 
 def main():
@@ -246,6 +247,9 @@ def main():
             model.pilot_quantile_init(dataset["train"], args.pilot_sample_size, training_args.per_device_train_batch_size, peak_class_prob=args.peak_class_prob)
     if args.model == "fixed_threshold":
         model.quantile_init(dataset["train"])
+    if args.fitted_ordinal:
+        model.init_std_hidden_pilot(dataset["train"], args.pilot_sample_size, training_args.per_device_train_batch_size)
+        model.set_ordinal_heads(torch.load(args.fitted_ordinal))
     if args.dump_initial_model is not None:
         trainer.save_model(training_args.output_dir + "/" + args.dump_initial_model)
     trainer.train()
