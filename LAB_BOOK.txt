@@ -180,3 +180,30 @@ per-task linears as with MS-linear. I will run this one next.
 That did not work at all. No idea why. The initial loss was kind of low so I
 tried increasing the learning rate to 1e-4, but it didn't work. Both threshold
 models could do with revisiting.
+
+2020-12-15
+
+17:00
+
+I have now tried fitting thresholds (using the VGAM R package) based on
+MS-linear and then attaching this to a fresh fwd_cumulative_multi body. It did
+not really work. I still need to a take a look at whether the cutoffs look
+sane. The next thing to try is to also transfer body weights.
+
+It's worth noting that the 3 epoch run of fwd_cumulative_multi after adding in
+quantile initialisation worked reasonably well, even if it did not quite manage
+to beat MS-linear. This one with the cutoffs does not work at all
+
+I've been thinking a bit about what the objectives here. Two thoughts about the
+objectives which may help to tackle them separately:
+
+ * With the ordinal models, the aim is to simultaneously estimate the
+   distribution (mean, std dev) of the labels with respect to the hidden scale
+   while also improving the quality of the hidden scale. These objectives may
+   work slightly against each other. The MT-softmax regression trains very
+   smoothly, and MS-linear is almost as smooth (try smooth L1 to improve
+   regression?).
+ * The multi-scale set up is inherently upsetting to trying to use MS-linear
+   since there is not enough ``squishability'' of the common scale. MS-linear
+   correctly seperates out the means of the labels, but each scale has
+   different spacing of these means.
