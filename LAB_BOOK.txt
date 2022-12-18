@@ -207,3 +207,18 @@ objectives which may help to tackle them separately:
    since there is not enough ``squishability'' of the common scale. MS-linear
    correctly seperates out the means of the labels, but each scale has
    different spacing of these means.
+
+2020-12-17
+
+13:00
+
+There is a paper about OLL -- alternatives to softmax loss that take into
+account category distance. It would be nice to implement these and try them
+with this data. I'm interested in whether this would push it towards adjacent
+categories on a single dimension. It is possible that dropout in the final
+layer adds noise which stops this happening.
+
+It is quite well known how to fine-tune BERT with contrastive loss/metric
+learning. It's worth seeing if that would help here since then we would
+probably not have the unstablity which appears to come from trying to estimate
+bondaries at the same time as pushing points towards the correct clusters.
