@@ -50,6 +50,7 @@ class ExtraArguments:
     dump_initial_model: Optional[str] = None
     fitted_ordinal: Optional[str] = None
     sampler: str = "default"
+    num_vgam_workers: int = 8
 
 
 def main():
@@ -151,7 +152,7 @@ def main():
             #model.init_scales_empirical(np.asarray(dataset["train"]["task_ids"]), np.asarray(dataset["train"]["label"]))
             model.init_scales_range()
             def proc_logits(logits):
-                return logits[0]
+                return logits
         elif args.model == "latent_softmax":
             from bert_ordinal.ordinal_models.experimental import BertForWithLatentAndSoftMax
             with silence_warnings():
@@ -171,7 +172,7 @@ def main():
                     base_model, num_labels=num_labels
                 )
             def proc_logits(logits):
-                return logits[0]
+                return logits
         elif args.model == "fixed_threshold":
             from bert_ordinal.ordinal_models.experimental import BertForMultiScaleFixedThresholdRegression
             with silence_warnings():
@@ -179,7 +180,7 @@ def main():
                     base_model, num_labels=num_labels
                 )
             def proc_logits(logits):
-                return logits[0]
+                return logits
         elif args.model == "metric":
             from bert_ordinal.ordinal_models.experimental import BertForLatentScaleMetricLearning
             with silence_warnings():
@@ -226,23 +227,36 @@ def main():
             print("predictions")
             pprint(pred_label_dists)
 
+        def refit(test_hiddens):
+            from bert_ordinal.eval import refit_eval
+            return refit_eval(
+                model,
+                dataset["train"],
+                training_args.train_batch_size,
+                task_ids,
+                test_hiddens,
+                batch_num_labels,
+                labels,
+                num_workers=args.num_vgam_workers,
+                mask_vglm_errors=True,
+                suppress_vglm_output=True
+            )
+
         if args.model == "metric":
-            from bert_ordinal.ordinal_models.vglm import label_dists_from_hiddens
-            test_hiddens = pred_label_dists
-            res = {}
-            for family_name in ["cumulative", "acat"]:
-                label_dists = label_dists_from_hiddens(model, family_name, dataset["train"], training_args.train_batch_size, task_ids, test_hiddens, num_labels, mask_vglm_errors=True, suppress_vglm_output=True)
-                summarized_label_dists = summarize_label_dists(label_dists)
-                family_eval = evaluate_pred_dist_avgs(summarized_label_dists, labels, batch_num_labels, task_ids)
-                for k, v in family_eval.items():
-                    res[f"{family_name}_{k}"] = v
-            return res
+            return refit(pred_label_dists)
         elif args.model in ("threshold", "fixed_threshold"):
-            predictions = pred_label_dists
-            return evaluate_predictions(predictions, labels, batch_num_labels, task_ids)
+            predictions, hiddens  = pred_label_dists
+            return {
+                **evaluate_predictions(predictions, labels, batch_num_labels, task_ids),
+                **refit(hiddens)
+            }
         elif args.model == "regress":
-            predictions = np.clip(pred_label_dists.squeeze(-1) + 0.5, 0, batch_num_labels - 1).astype(int)
-            return evaluate_predictions(predictions, labels, batch_num_labels, task_ids)
+            raw_predictions, hiddens = pred_label_dists
+            predictions = np.clip(raw_predictions.squeeze(-1) + 0.5, 0, batch_num_labels - 1).astype(int)
+            return {
+                **evaluate_predictions(predictions, labels, batch_num_labels, task_ids)
+                **refit(hiddens)
+            }
         else:
             summarized_label_dists = dict(zip(PRED_AVGS, pred_label_dists[1:]))
             return evaluate_pred_dist_avgs(summarized_label_dists, labels, batch_num_labels, task_ids)
