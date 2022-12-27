@@ -28,6 +28,7 @@ ALL_MUTISCALE_MODELS = [
     ModelConfig("latent_softmax"),
     ModelConfig("threshold"),
     ModelConfig("fixed_threshold"),
+    ModelConfig("metric"),
     *(
         ModelConfig(link, discrimination_mode)
         for link in ("fwd_cumulative", "fwd_sratio", "bwd_cratio", "fwd_acat")

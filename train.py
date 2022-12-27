@@ -49,6 +49,7 @@ class ExtraArguments:
     peak_class_prob: float = 0.5
     dump_initial_model: Optional[str] = None
     fitted_ordinal: Optional[str] = None
+    sampler: str = "default"
 
 
 def main():
@@ -62,6 +63,7 @@ def main():
         )
     else:
         training_args, args = parser.parse_args_into_dataclasses()
+    wandb.config.update(args)
 
     # args = parse_args()
     if args.threads:
@@ -82,7 +84,7 @@ def main():
             f"Warning: multi-scale datasets such as {args.dataset} are not support with torch < 1.13",
             file=sys.stderr,
         )
-    
+
     if args.smoke:
         base_model = "prajjwal1/bert-tiny"
         torch.set_num_threads(1)
@@ -178,6 +180,14 @@ def main():
                 )
             def proc_logits(logits):
                 return logits[0]
+        elif args.model == "metric":
+            from bert_ordinal.ordinal_models.experimental import BertForLatentScaleMetricLearning
+            with silence_warnings():
+                model = BertForLatentScaleMetricLearning.from_pretrained(
+                    base_model, num_labels=num_labels
+                )
+            def proc_logits(logits):
+                return logits
         elif args.model in link_registry:
             from bert_ordinal import BertForMultiScaleOrdinalRegression
             model = BertForMultiScaleOrdinalRegression.from_pretrained(
@@ -216,14 +226,26 @@ def main():
             print("predictions")
             pprint(pred_label_dists)
 
-        if args.model in ("regress", "threshold", "fixed_threshold"):
-            if args.model == "regress":
-                predictions = np.clip(pred_label_dists.squeeze(-1) + 0.5, 0, batch_num_labels - 1).astype(int)
-            else:
-                predictions = pred_label_dists
-            return evaluate_predictions(predictions, labels, batch_num_labels)
+        if args.model == "metric":
+            from bert_ordinal.ordinal_models.vglm import label_dists_from_hiddens
+            test_hiddens = pred_label_dists
+            res = {}
+            for family_name in ["cumulative", "acat"]:
+                label_dists = label_dists_from_hiddens(model, family_name, dataset["train"], training_args.train_batch_size, task_ids, test_hiddens, num_labels, mask_vglm_errors=True, suppress_vglm_output=True)
+                summarized_label_dists = summarize_label_dists(label_dists)
+                family_eval = evaluate_pred_dist_avgs(summarized_label_dists, labels, batch_num_labels, task_ids)
+                for k, v in family_eval.items():
+                    res[f"{family_name}_{k}"] = v
+            return res
+        elif args.model in ("threshold", "fixed_threshold"):
+            predictions = pred_label_dists
+            return evaluate_predictions(predictions, labels, batch_num_labels, task_ids)
+        elif args.model == "regress":
+            predictions = np.clip(pred_label_dists.squeeze(-1) + 0.5, 0, batch_num_labels - 1).astype(int)
+            return evaluate_predictions(predictions, labels, batch_num_labels, task_ids)
         else:
-            return evaluate_pred_dist_avgs(dict(zip(PRED_AVGS, pred_label_dists[1:])), labels, batch_num_labels)
+            summarized_label_dists = dict(zip(PRED_AVGS, pred_label_dists[1:]))
+            return evaluate_pred_dist_avgs(summarized_label_dists, labels, batch_num_labels, task_ids)
 
     print("")
     print(
@@ -231,14 +253,45 @@ def main():
     )
     print("")
 
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=dataset["train"],
-        eval_dataset=dataset["test"],
-        compute_metrics=compute_metrics,
-        preprocess_logits_for_metrics=None if proc_logits is None else lambda logits, _labels: proc_logits(logits)
-    )
+    if proc_logits is None:
+        preprocess_logits_for_metrics = None
+    else:
+        preprocess_logits_for_metrics = lambda logits, _labels: proc_logits(logits)
+
+    if args.model == "metric":
+        from bert_ordinal.ordinal_models.experimental import MetricLearningTrainer
+        if args.sampler != "default":
+            raise ValueError("Custom samplers not supported for metric learning")
+
+        trainer = MetricLearningTrainer(
+            model=model,
+            args=training_args,
+            train_dataset=dataset["train"],
+            eval_dataset=dataset["test"],
+            compute_metrics=compute_metrics,
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics
+        )
+    else:
+        if args.sampler == "default":
+            trainer = Trainer(
+                model=model,
+                args=training_args,
+                train_dataset=dataset["train"],
+                eval_dataset=dataset["test"],
+                compute_metrics=compute_metrics,
+                preprocess_logits_for_metrics=preprocess_logits_for_metrics
+            )
+        else:
+            from bert_ordinal.ordinal_models.experimental import CustomSamplerTrainer
+            trainer = CustomSamplerTrainer(
+                sampler=args.sampler,
+                model=model,
+                args=training_args,
+                train_dataset=dataset["train"],
+                eval_dataset=dataset["test"],
+                compute_metrics=compute_metrics,
+                preprocess_logits_for_metrics=preprocess_logits_for_metrics
+            )
     if args.pilot_quantiles:
         # We wait until after Trainer is initialised to make sure the model is on the GPU
         if args.model == "threshold":
