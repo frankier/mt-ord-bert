@@ -254,7 +254,7 @@ def main():
             raw_predictions, hiddens = pred_label_dists
             predictions = np.clip(raw_predictions.squeeze(-1) + 0.5, 0, batch_num_labels - 1).astype(int)
             return {
-                **evaluate_predictions(predictions, labels, batch_num_labels, task_ids)
+                **evaluate_predictions(predictions, labels, batch_num_labels, task_ids),
                 **refit(hiddens)
             }
         else:
