@@ -17,6 +17,7 @@ from bert_ordinal.eval import evaluate_pred_dist_avgs, evaluate_predictions
 from bert_ordinal.element_link import link_registry
 from bert_ordinal.label_dist import PRED_AVGS, summarize_label_dists, summarize_label_dist
 from bert_ordinal.transformers_utils import silence_warnings
+from mt_ord_bert_utils import get_tokenizer
 
 
 metric_accuracy = evaluate.load("accuracy")
@@ -51,6 +52,12 @@ class ExtraArguments:
     fitted_ordinal: Optional[str] = None
     sampler: str = "default"
     num_vgam_workers: int = 8
+
+
+def prepare_dataset_for_fast_inference(dataset, label_names):
+    wanted_columns = {"input_ids", "attention_mask", "token_type_ids", "label", "label_ids", "scale_points", "length", *label_names}
+    dataset = dataset.remove_columns(list(set(dataset.column_names) - wanted_columns))
+    return dataset.sort("length")
 
 
 def main():
@@ -215,6 +222,11 @@ def main():
             print(f"Unknown model type {args.model}", file=sys.stderr)
             sys.exit(-1)
 
+    tokenizer = get_tokenizer()
+
+    eval_train_dataset = prepare_dataset_for_fast_inference(dataset["train"], label_names)
+    eval_test_dataset = prepare_dataset_for_fast_inference(dataset["test"], label_names)
+
     training_args.label_names = label_names
     training_args.optim = "adamw_torch"
 
@@ -238,9 +250,14 @@ def main():
 
         def refit(test_hiddens):
             from bert_ordinal.eval import refit_eval
+            print()
+            print(" * Refit * ")
+            print()
+            print()
             return refit_eval(
                 model,
-                dataset["train"],
+                tokenizer,
+                eval_train_dataset,
                 training_args.train_batch_size,
                 task_ids,
                 test_hiddens,
@@ -290,19 +307,22 @@ def main():
             model=model,
             args=training_args,
             train_dataset=dataset["train"],
-            eval_dataset=dataset["test"],
+            eval_dataset=eval_test_dataset,
             compute_metrics=compute_metrics,
-            preprocess_logits_for_metrics=preprocess_logits_for_metrics
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+            tokenizer=tokenizer
         )
     else:
         if args.sampler == "default":
+            training_args.group_by_length = True
             trainer = Trainer(
                 model=model,
                 args=training_args,
                 train_dataset=dataset["train"],
-                eval_dataset=dataset["test"],
+                eval_dataset=eval_test_dataset,
                 compute_metrics=compute_metrics,
-                preprocess_logits_for_metrics=preprocess_logits_for_metrics
+                preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+                tokenizer=tokenizer
             )
         else:
             from bert_ordinal.ordinal_models.experimental import CustomSamplerTrainer
@@ -311,9 +331,10 @@ def main():
                 model=model,
                 args=training_args,
                 train_dataset=dataset["train"],
-                eval_dataset=dataset["test"],
+                eval_dataset=eval_test_dataset,
                 compute_metrics=compute_metrics,
-                preprocess_logits_for_metrics=preprocess_logits_for_metrics
+                preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+                tokenizer=tokenizer
             )
     if args.pilot_quantiles:
         # We wait until after Trainer is initialised to make sure the model is on the GPU
@@ -324,7 +345,7 @@ def main():
     if args.model == "fixed_threshold":
         model.quantile_init(dataset["train"])
     if args.fitted_ordinal:
-        model.init_std_hidden_pilot(dataset["train"], args.pilot_sample_size, training_args.per_device_train_batch_size)
+        model.init_std_hidden_pilot(dataset["train"], tokenizer, args.pilot_sample_size, training_args.per_device_train_batch_size)
         model.set_ordinal_heads(torch.load(args.fitted_ordinal))
     if args.dump_initial_model is not None:
         trainer.save_model(training_args.output_dir + "/" + args.dump_initial_model)
