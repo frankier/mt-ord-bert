@@ -8,9 +8,9 @@ from bert_ordinal.datasets import load_from_disk_with_labels
 from asciihist import asciihist
 from transformers import logging
 import torch
-import sys
 import numpy as np
 import argparse
+from mt_ord_bert_utils import get_tokenizer
 
 
 def parse_args():
@@ -25,6 +25,7 @@ def parse_args():
 
 
 def main():
+    tokenizer = get_tokenizer()
     args = parse_args()
     dataset, num_labels = load_from_disk_with_labels(args.dataset)
     dataset["train"] = dataset["train"].shuffle(seed=42).select(range(args.num_examples))
@@ -39,7 +40,7 @@ def main():
     if args.range_init:
         model.init_scales_range()
     if args.std_pilot_init:
-        model.init_std_hidden_pilot(dataset["train"], args.pilot_samples, 1)
+        model.init_std_hidden_pilot(dataset["train"], tokenizer, args.pilot_samples, 1)
     logging.set_verbosity_warning()
     input_ids = torch.tensor(dataset["train"]["input_ids"])
     task_ids = torch.LongTensor(dataset["train"]["task_ids"]).unsqueeze(-1)
