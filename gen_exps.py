@@ -25,6 +25,8 @@ class ModelConfig:
 ALL_MUTISCALE_MODELS = [
     ModelConfig("class"),
     ModelConfig("regress"),
+    ModelConfig("regress_l1"),
+    ModelConfig("regress_adjust_l1"),
     ModelConfig("latent_softmax"),
     ModelConfig("threshold"),
     ModelConfig("fixed_threshold"),
