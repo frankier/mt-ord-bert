@@ -54,6 +54,7 @@ class ExtraArguments:
 
 
 def main():
+    torch.backends.cuda.matmul.allow_tf32 = True
     parser = HfArgumentParser((TrainingArguments, ExtraArguments))
 
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
