@@ -144,7 +144,10 @@ def main():
         dataset_dir = pjoin(args.data_root, dataset)
         if not isdir(dataset_dir):
             continue
-        for model_config in MODELS[dataset]:
+        last_bit = dataset.rsplit("_", 1)[-1]
+        if last_bit.endswith("pct"):
+            orig_dataset = dataset.rsplit("_", 1)[0]
+        for model_config in MODELS[orig_dataset]:
             if args.model and model_config.name() not in args.model:
                 continue
             comb_name = f"{dataset}_{model_config.name()}"
@@ -153,14 +156,14 @@ def main():
             conf_json_path = pjoin(dirs["jsons"], f"{comb_name}.json")
             config = {
                 **JOB_TMPL,
-                **DATA_JOB_TMPL[dataset],
+                **DATA_JOB_TMPL[orig_dataset],
                 "dataset": dataset_dir,
                 "model": model_config.link,
                 "output_dir": log_dir,
             }
             config["discrimination_mode"] = model_config.discrimination_mode
             dump_json(config, conf_json_path)
-            if dataset in ("rt_one", "rt_irr5"):
+            if orig_dataset in ("rt_one", "rt_irr5"):
                 time = "1:00:00"
             else:
                 time = "2:00:00"
