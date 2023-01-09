@@ -144,11 +144,19 @@ def main():
                     label_dists,
                     *summarize_label_dists(label_dists).values(),
                 )
-        elif args.model == "regress":
+        elif args.model in ("regress", "regress_l1", "regress_adjust_l1"):
             from bert_ordinal.baseline_models.regression import BertForMultiScaleSequenceRegression
             with silence_warnings():
                 model = BertForMultiScaleSequenceRegression.from_pretrained(
-                    base_model, num_labels=num_labels
+                    base_model,
+                    num_labels=num_labels,
+                    loss=(
+                        {
+                            "regress": "mse",
+                            "regress_l1": "mae",
+                            "regress_adjust_l1": "adjust_l1"
+                        }[args.model]
+                    ),
                 )
             #model.init_scales_empirical(np.asarray(dataset["train"]["task_ids"]), np.asarray(dataset["train"]["label"]))
             model.init_scales_range()
@@ -251,7 +259,7 @@ def main():
                 **evaluate_predictions(predictions, labels, batch_num_labels, task_ids),
                 **refit(hiddens)
             }
-        elif args.model == "regress":
+        elif args.model in ("regress", "regress_l1", "regress_adjust_l1"):
             raw_predictions, hiddens = pred_label_dists
             predictions = np.clip(raw_predictions.squeeze(-1) + 0.5, 0, batch_num_labels - 1).astype(int)
             return {
