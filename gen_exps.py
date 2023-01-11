@@ -145,7 +145,7 @@ def main():
     args = parse_args()
     makedirs(args.out, exist_ok=True)
     dirs = {}
-    for out_dir in ["jsons", "outs", "results", "jobs"]:
+    for out_dir in ["jsons", "outs", "results", "jobs", "dumps"]:
         dirs[out_dir] = pjoin(args.out, out_dir)
         makedirs(pjoin(args.out, out_dir), exist_ok=True)
     for dataset in listdir(args.data_root):
@@ -163,13 +163,16 @@ def main():
             comb_name = f"{dataset}_{model_config.name()}"
             log_dir = pjoin(dirs["results"], comb_name)
             makedirs(log_dir, exist_ok=True)
+            dump_dir = pjoin(dirs["dumps"], comb_name)
+            makedirs(dump_dir, exist_ok=True)
             conf_json_path = pjoin(dirs["jsons"], f"{comb_name}.json")
             config = {
                 **JOB_TMPL,
-                **DATA_JOB_TMPL[orig_dataset],
+                **(DATA_JOB_TMPL[dataset] if dataset in DATA_JOB_TMPL else DATA_JOB_TMPL[orig_dataset]),
                 "dataset": dataset_dir,
                 "model": model_config.link,
                 "output_dir": log_dir,
+                "dump_results": dump_dir,
             }
             config["discrimination_mode"] = model_config.discrimination_mode
             dump_json(config, conf_json_path)

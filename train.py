@@ -13,6 +13,7 @@ from pprint import pprint
 
 from bert_ordinal import Trainer
 from bert_ordinal.datasets import load_from_disk_with_labels
+from bert_ordinal.dump import DumpWriterCallback
 from bert_ordinal.eval import evaluate_pred_dist_avgs, evaluate_predictions
 from bert_ordinal.element_link import link_registry
 from bert_ordinal.label_dist import PRED_AVGS, summarize_label_dists, summarize_label_dist
@@ -50,6 +51,7 @@ class ExtraArguments:
     peak_class_prob: float = 0.5
     dump_initial_model: Optional[str] = None
     fitted_ordinal: Optional[str] = None
+    dump_results: Optional[str] = None
     sampler: str = "default"
     num_vgam_workers: int = 8
 
@@ -129,8 +131,9 @@ def main():
             link = model.link
 
             def proc_logits(logits):
-                label_dist = link.label_dist_from_logits(logits[1])
+                label_dist = link.label_dist_from_logits(logits[0])
                 return (
+                    logits[1],
                     label_dist,
                     *summarize_label_dist(label_dist).values()
                 )
@@ -215,6 +218,7 @@ def main():
             def proc_logits(logits):
                 label_dists = [link.label_dist_from_logits(li) for li in logits[0].unbind()]
                 return (
+                    logits[1],
                     label_dists,
                     *summarize_label_dists(label_dists).values(),
                 )
@@ -263,15 +267,20 @@ def main():
                 test_hiddens,
                 batch_num_labels,
                 labels,
+                dump_writer=dump_writer,
                 num_workers=args.num_vgam_workers,
                 mask_vglm_errors=True,
                 suppress_vglm_output=True
             )
 
         if args.model == "metric":
+            if args.dump_results:
+                dump_writer.add_info_full("test", hidden=pred_label_dists.squeeze(-1))
             return refit(pred_label_dists)
         elif args.model in ("threshold", "fixed_threshold"):
             predictions, hiddens  = pred_label_dists
+            if args.dump_results:
+                dump_writer.add_info_full("test", hidden=hiddens.squeeze(-1), predictions=predictions)
             return {
                 **evaluate_predictions(predictions, labels, batch_num_labels, task_ids),
                 **refit(hiddens)
@@ -279,12 +288,18 @@ def main():
         elif args.model in ("regress", "regress_l1", "regress_adjust_l1"):
             raw_predictions, hiddens = pred_label_dists
             predictions = np.clip(raw_predictions.squeeze(-1) + 0.5, 0, batch_num_labels - 1).astype(int)
+            if args.dump_results:
+                dump_writer.add_info_full("test", hidden=hiddens.squeeze(-1), predictions=predictions)
             return {
                 **evaluate_predictions(predictions, labels, batch_num_labels, task_ids),
                 **refit(hiddens)
             }
         else:
-            summarized_label_dists = dict(zip(PRED_AVGS, pred_label_dists[1:]))
+            hiddens = pred_label_dists[0]
+            label_dists = pred_label_dists[1]
+            summarized_label_dists = dict(zip(PRED_AVGS, pred_label_dists[2:]))
+            if args.dump_results:
+                dump_writer.add_info_full("test", hidden=hiddens.squeeze(-1), label_dists=label_dists, **summarized_label_dists)
             return evaluate_pred_dist_avgs(summarized_label_dists, labels, batch_num_labels, task_ids)
 
     print("")
@@ -336,6 +351,10 @@ def main():
                 preprocess_logits_for_metrics=preprocess_logits_for_metrics,
                 tokenizer=tokenizer
             )
+    if args.dump_results:
+        dump_writer_cb = DumpWriterCallback(args.dump_results)
+        dump_writer = dump_writer_cb.dump_writer
+        trainer.add_callback(dump_writer_cb)
     if args.pilot_quantiles:
         # We wait until after Trainer is initialised to make sure the model is on the GPU
         if args.model == "threshold":
