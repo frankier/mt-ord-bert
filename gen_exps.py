@@ -61,7 +61,8 @@ JOB_TMPL = {
     "dataloader_num_workers": 8,
     "per_device_train_batch_size": 32,
     "per_device_eval_batch_size": 32,
-    "num_dataset_proc": 8
+    "num_dataset_proc": 8,
+    "logging_first_step": True,
 }
 
 DATA_JOB_TMPL = {
@@ -82,6 +83,15 @@ DATA_JOB_TMPL = {
         "eval_steps": 100,
         "logging_steps": 100,
         "save_steps": 100,
+    },
+    "rt_irr5_5pct": {
+        "lr_scheduler_type": "linear",
+        "learning_rate": 2e-5,
+        "warmup_ratio": 0.1,
+        "max_steps": 207,
+        "eval_steps": 23,
+        "logging_steps": 23,
+        "save_steps": 207,
     },
     "rt_one": {
         "lr_scheduler_type": "constant_with_warmup",
