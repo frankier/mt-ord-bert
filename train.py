@@ -10,6 +10,7 @@ from transformers import (
     TrainingArguments,
 )
 from pprint import pprint
+from os.path import join as pjoin
 
 from bert_ordinal import Trainer
 from bert_ordinal.datasets import load_from_disk_with_labels
@@ -54,12 +55,53 @@ class ExtraArguments:
     dump_results: Optional[str] = None
     sampler: str = "default"
     num_vgam_workers: int = 8
+    initial_probe: bool = False
+    initial_probe_lr: Optional[float] = None
+    initial_probe_steps: Optional[float] = None
 
 
 def prepare_dataset_for_fast_inference(dataset, label_names):
     wanted_columns = {"input_ids", "attention_mask", "token_type_ids", "label", "label_ids", "scale_points", "length", *label_names}
     dataset = dataset.remove_columns(list(set(dataset.column_names) - wanted_columns))
     return dataset.sort("length")
+
+
+def init_weights(training_args, args, model, tokenizer, train_dataset, eval_dataset):
+    if args.pilot_quantiles:
+        # We wait until after Trainer is initialised to make sure the model is on the GPU
+        if args.model == "threshold":
+            model.pilot_quantile_init(train_dataset, tokenizer, args.pilot_sample_size, training_args.per_device_train_batch_size)
+        elif args.model in ("regress", "regress_l1", "regress_adjust_l1", "mono_regress", "mono_regress_l1", "mono_regress_adjust_l1"):
+            model.pilot_quantile_init(train_dataset, tokenizer, args.pilot_sample_size, training_args.per_device_train_batch_size, np.asarray(train_dataset["task_ids"]), np.asarray(train_dataset["label"]))
+        else:
+            model.pilot_quantile_init(train_dataset, tokenizer, args.pilot_sample_size, training_args.per_device_train_batch_size, peak_class_prob=args.peak_class_prob)
+    if args.model == "fixed_threshold":
+        model.quantile_init(train_dataset)
+    if args.fitted_ordinal:
+        model.init_std_hidden_pilot(train_dataset, tokenizer, args.pilot_sample_size, training_args.per_device_train_batch_size)
+        model.set_ordinal_heads(torch.load(args.fitted_ordinal))
+    if args.initial_probe:
+        linear_probe_args = TrainingArguments(
+            learning_rate=args.initial_probe_lr if args.initial_probe_lr is not None else training_args.learning_rate,
+            max_steps=args.initial_probe_steps or -1,
+            num_train_epochs=1.0,
+            prediction_loss_only=True,
+            output_dir=pjoin(training_args.output_dir, "linear_probe"),
+            save_strategy="no",
+            lr_scheduler_type="constant",
+        )
+        linear_probe_trainer = Trainer(
+            model=model,
+            args=linear_probe_args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            tokenizer=tokenizer,
+        )
+        for param in model.bert.parameters():
+            param.requires_grad = False
+        linear_probe_trainer.train()
+        for param in model.bert.parameters():
+            param.requires_grad = True
 
 
 def main():
@@ -169,7 +211,25 @@ def main():
                     ),
                 )
             #model.init_scales_empirical(np.asarray(dataset["train"]["task_ids"]), np.asarray(dataset["train"]["label"]))
-            model.init_scales_range()
+            #model.init_scales_range()
+            def proc_logits(logits):
+                return logits
+        elif args.model in ("mono_regress", "mono_regress_l1", "mono_regress_adjust_l1"):
+            from bert_ordinal.experimental_regression import BertForMultiMonotonicTransformSequenceRegression
+            with silence_warnings():
+                model = BertForMultiMonotonicTransformSequenceRegression.from_pretrained(
+                    base_model,
+                    num_labels=num_labels,
+                    loss=(
+                        {
+                            "mono_regress": "mse",
+                            "mono_regress_l1": "mae",
+                            "mono_regress_adjust_l1": "adjust_l1"
+                        }[args.model]
+                    ),
+                )
+            #model.init_scales_empirical(np.asarray(dataset["train"]["task_ids"]), np.asarray(dataset["train"]["label"]))
+            #model.init_scales_range()
             def proc_logits(logits):
                 return logits
         elif args.model == "latent_softmax":
@@ -235,6 +295,8 @@ def main():
     training_args.optim = "adamw_torch"
 
     def compute_metrics(eval_pred):
+        step = trainer.state.global_step
+        dump_writer.start_step_dump(step)
         pred_label_dists, labels = eval_pred
         if len(label_names) == 2:
             labels, task_ids = labels
@@ -276,21 +338,21 @@ def main():
         if args.model == "metric":
             if args.dump_results:
                 dump_writer.add_info_full("test", hidden=pred_label_dists.squeeze(-1))
-            return refit(pred_label_dists)
+            res = refit(pred_label_dists)
         elif args.model in ("threshold", "fixed_threshold"):
             predictions, hiddens  = pred_label_dists
             if args.dump_results:
                 dump_writer.add_info_full("test", hidden=hiddens.squeeze(-1), predictions=predictions)
-            return {
+            res = {
                 **evaluate_predictions(predictions, labels, batch_num_labels, task_ids),
                 **refit(hiddens)
             }
-        elif args.model in ("regress", "regress_l1", "regress_adjust_l1"):
+        elif args.model in ("regress", "regress_l1", "regress_adjust_l1", "mono_regress", "mono_regress_l1", "mono_regress_adjust_l1"):
             raw_predictions, hiddens = pred_label_dists
             predictions = np.clip(raw_predictions.squeeze(-1) + 0.5, 0, batch_num_labels - 1).astype(int)
             if args.dump_results:
                 dump_writer.add_info_full("test", hidden=hiddens.squeeze(-1), predictions=predictions)
-            return {
+            res =  {
                 **evaluate_predictions(predictions, labels, batch_num_labels, task_ids),
                 **refit(hiddens)
             }
@@ -300,7 +362,11 @@ def main():
             summarized_label_dists = dict(zip(PRED_AVGS, pred_label_dists[2:]))
             if args.dump_results:
                 dump_writer.add_info_full("test", hidden=hiddens.squeeze(-1), label_dists=label_dists, **summarized_label_dists)
-            return evaluate_pred_dist_avgs(summarized_label_dists, labels, batch_num_labels, task_ids)
+            res =  evaluate_pred_dist_avgs(summarized_label_dists, labels, batch_num_labels, task_ids)
+        dump_writer.finish_step_dump(model)
+        return res
+
+    init_weights(training_args, args, model, tokenizer, dataset["train"], eval_test_dataset)
 
     print("")
     print(
@@ -355,17 +421,6 @@ def main():
         dump_writer_cb = DumpWriterCallback(args.dump_results)
         dump_writer = dump_writer_cb.dump_writer
         trainer.add_callback(dump_writer_cb)
-    if args.pilot_quantiles:
-        # We wait until after Trainer is initialised to make sure the model is on the GPU
-        if args.model == "threshold":
-            model.pilot_quantile_init(dataset["train"], args.pilot_sample_size, training_args.per_device_train_batch_size)
-        else:
-            model.pilot_quantile_init(dataset["train"], args.pilot_sample_size, training_args.per_device_train_batch_size, peak_class_prob=args.peak_class_prob)
-    if args.model == "fixed_threshold":
-        model.quantile_init(dataset["train"])
-    if args.fitted_ordinal:
-        model.init_std_hidden_pilot(dataset["train"], tokenizer, args.pilot_sample_size, training_args.per_device_train_batch_size)
-        model.set_ordinal_heads(torch.load(args.fitted_ordinal))
     if args.dump_initial_model is not None:
         trainer.save_model(training_args.output_dir + "/" + args.dump_initial_model)
     trainer.train()
