@@ -1,3 +1,4 @@
+from os.path import relpath
 import os
 import sys
 from dataclasses import dataclass
@@ -17,7 +18,7 @@ from bert_ordinal.datasets import load_from_disk_with_labels
 from bert_ordinal.dump import DumpWriterCallback
 from bert_ordinal.eval import evaluate_pred_dist_avgs, evaluate_predictions
 from bert_ordinal.element_link import link_registry
-from bert_ordinal.label_dist import PRED_AVGS, summarize_label_dists, summarize_label_dist
+from bert_ordinal.label_dist import PRED_AVGS, summarize_label_dists, summarize_label_dist, clip_predictions_np
 from bert_ordinal.transformers_utils import silence_warnings
 from mt_ord_bert_utils import get_tokenizer
 
@@ -48,6 +49,7 @@ class ExtraArguments:
     num_dataset_proc: Optional[int] = None
     smoke: bool = False
     pilot_quantiles: bool = False
+    pilot_train_init: bool = False
     pilot_sample_size: int = 256
     peak_class_prob: float = 0.5
     dump_initial_model: Optional[str] = None
@@ -60,10 +62,13 @@ class ExtraArguments:
     initial_probe_steps: Optional[float] = None
 
 
-def prepare_dataset_for_fast_inference(dataset, label_names):
+def prepare_dataset_for_fast_inference(dataset, label_names, sort=False):
     wanted_columns = {"input_ids", "attention_mask", "token_type_ids", "label", "label_ids", "scale_points", "length", *label_names}
     dataset = dataset.remove_columns(list(set(dataset.column_names) - wanted_columns))
-    return dataset.sort("length")
+    if sort:
+        return dataset.sort("length")
+    else:
+        return dataset
 
 
 def init_weights(training_args, args, model, tokenizer, train_dataset, eval_dataset):
@@ -72,9 +77,11 @@ def init_weights(training_args, args, model, tokenizer, train_dataset, eval_data
         if args.model == "threshold":
             model.pilot_quantile_init(train_dataset, tokenizer, args.pilot_sample_size, training_args.per_device_train_batch_size)
         elif args.model in ("regress", "regress_l1", "regress_adjust_l1", "mono_regress", "mono_regress_l1", "mono_regress_adjust_l1"):
-            model.pilot_quantile_init(train_dataset, tokenizer, args.pilot_sample_size, training_args.per_device_train_batch_size, np.asarray(train_dataset["task_ids"]), np.asarray(train_dataset["label"]))
+            model.pilot_quantile_init(train_dataset, tokenizer, args.pilot_sample_size, training_args.per_device_train_batch_size)
         else:
             model.pilot_quantile_init(train_dataset, tokenizer, args.pilot_sample_size, training_args.per_device_train_batch_size, peak_class_prob=args.peak_class_prob)
+    if args.pilot_train_init:
+        model.pilot_train_init(train_dataset, tokenizer, training_args.per_device_train_batch_size)
     if args.model == "fixed_threshold":
         model.quantile_init(train_dataset)
     if args.fitted_ordinal:
@@ -288,8 +295,8 @@ def main():
 
     tokenizer = get_tokenizer()
 
-    eval_train_dataset = prepare_dataset_for_fast_inference(dataset["train"], label_names)
-    eval_test_dataset = prepare_dataset_for_fast_inference(dataset["test"], label_names)
+    eval_train_dataset = prepare_dataset_for_fast_inference(dataset["train"], label_names, sort=not args.dump_results)
+    eval_test_dataset = prepare_dataset_for_fast_inference(dataset["test"], label_names, sort=not args.dump_results)
 
     training_args.label_names = label_names
     training_args.optim = "adamw_torch"
@@ -314,6 +321,8 @@ def main():
             print("predictions")
             pprint(pred_label_dists)
 
+        dump_callback = None
+
         def refit(test_hiddens):
             from bert_ordinal.eval import refit_eval
             print()
@@ -330,6 +339,7 @@ def main():
                 batch_num_labels,
                 labels,
                 dump_writer=dump_writer,
+                dump_callback=dump_callback,
                 num_workers=args.num_vgam_workers,
                 mask_vglm_errors=True,
                 suppress_vglm_output=True
@@ -342,16 +352,20 @@ def main():
         elif args.model in ("threshold", "fixed_threshold"):
             predictions, hiddens  = pred_label_dists
             if args.dump_results:
-                dump_writer.add_info_full("test", hidden=hiddens.squeeze(-1), predictions=predictions)
+                dump_writer.add_info_full("test", hidden=hiddens.squeeze(-1), pred=predictions)
             res = {
                 **evaluate_predictions(predictions, labels, batch_num_labels, task_ids),
                 **refit(hiddens)
             }
         elif args.model in ("regress", "regress_l1", "regress_adjust_l1", "mono_regress", "mono_regress_l1", "mono_regress_adjust_l1"):
             raw_predictions, hiddens = pred_label_dists
-            predictions = np.clip(raw_predictions.squeeze(-1) + 0.5, 0, batch_num_labels - 1).astype(int)
+            predictions = clip_predictions_np(raw_predictions, batch_num_labels)
             if args.dump_results:
-                dump_writer.add_info_full("test", hidden=hiddens.squeeze(-1), predictions=predictions)
+                dump_writer.add_info_full("test", hidden=hiddens.squeeze(-1), pred=predictions)
+                def dump_callback(batch, result):
+                    return {
+                        "pred": clip_predictions_np(result.logits.detach().cpu().numpy(), batch.scale_points.cpu().numpy())
+                    }
             res =  {
                 **evaluate_predictions(predictions, labels, batch_num_labels, task_ids),
                 **refit(hiddens)
@@ -361,12 +375,13 @@ def main():
             label_dists = pred_label_dists[1]
             summarized_label_dists = dict(zip(PRED_AVGS, pred_label_dists[2:]))
             if args.dump_results:
-                dump_writer.add_info_full("test", hidden=hiddens.squeeze(-1), label_dists=label_dists, **summarized_label_dists)
+                dump_writer.add_info_full("test", hidden=hiddens.squeeze(-1), **{"pred/" + k: v for k, v in summarized_label_dists.items()})
             res =  evaluate_pred_dist_avgs(summarized_label_dists, labels, batch_num_labels, task_ids)
         dump_writer.finish_step_dump(model)
         return res
 
-    init_weights(training_args, args, model, tokenizer, dataset["train"], eval_test_dataset)
+    # dataset["train"]
+    init_weights(training_args, args, model, tokenizer, eval_train_dataset, eval_test_dataset)
 
     print("")
     print(
@@ -418,7 +433,7 @@ def main():
                 tokenizer=tokenizer
             )
     if args.dump_results:
-        dump_writer_cb = DumpWriterCallback(args.dump_results)
+        dump_writer_cb = DumpWriterCallback(args.dump_results, zip_with=relpath(args.dataset, args.dump_results))
         dump_writer = dump_writer_cb.dump_writer
         trainer.add_callback(dump_writer_cb)
     if args.dump_initial_model is not None:
