@@ -109,7 +109,7 @@ are some possible approaches:
  * Better initialisation.
  * Better diagnostics. How far exactly are the final cutoffs from their initialisation?
 
-2020-12-12
+2022-12-12
 
 10:50
 
@@ -138,7 +138,7 @@ its not clear what can be done better. Perhaps sufficient parameter turning
 would lead to a more stable learning process, but it's certainly not clear at
 the moment.
 
-2020-12-13
+2022-12-13
 
 9:00
 
@@ -208,7 +208,7 @@ objectives which may help to tackle them separately:
    correctly seperates out the means of the labels, but each scale has
    different spacing of these means.
 
-2020-12-17
+2022-12-17
 
 13:00
 
@@ -223,7 +223,7 @@ learning. It's worth seeing if that would help here since then we would
 probably not have the unstablity which appears to come from trying to estimate
 bondaries at the same time as pushing points towards the correct clusters.
 
-2020-12-27
+2022-12-27
 
 I have tried implementing an ad-hoc metric learning method I just came up with,
 and it worked okay. I have also implemented fitting of the models during
@@ -238,3 +238,11 @@ combination of the fact that the data is quite noisy and the other loss
 functions are quite sensitive to outliers. L1 or some smooth L1 regression
 could be investigated for regression. This is a good argument for the threshold
 model since it should be easy-ish to plug in some more robust loss there.
+
+2023-01-14
+
+This week I have made some optimisations for faster training and implemented a
+regression model based on learning a small monotonic neural network per-head. I
+have also implemented dumping during training.
+
+Initialisation is again an issue.
