@@ -246,3 +246,20 @@ regression model based on learning a small monotonic neural network per-head. I
 have also implemented dumping during training.
 
 Initialisation is again an issue.
+
+2023-01-17
+
+The regression + monotonic scaler is working, but not to the extent that it
+beats the MS-linear baseline. Inspection reveals that it is not able to learn
+the marginal. For example, for task_id=2 (Frank Swietek) it should predict some
+Fs but nothing for anything between (exclusive) F and D-. This is not the case.
+From this it appears that the monotonic function is not correctly learning a
+vertical/almost vertical segment.
+
+Currently the initalisation is based on getting the true labels and sorting them
+along with hidden values at initialisation time. Currently this first epoch is
+not getting dumped. Therefore this should be fixed and initialisation revisited
+to make sure it is working correctly. After this, one possibility would be to
+consider a simpler network (e.g. single 24 node layer) and see if that works
+better or adding residual connections. Another possibility is to move onto
+splines.
