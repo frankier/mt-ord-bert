@@ -6,6 +6,7 @@ from typing import Optional
 import evaluate
 import numpy as np
 import torch
+from torch.multiprocessing import Pool
 from transformers import (
     HfArgumentParser,
     TrainingArguments,
@@ -301,6 +302,11 @@ def main():
     training_args.label_names = label_names
     training_args.optim = "adamw_torch"
 
+    if args.num_vgam_workers > 1:
+        pool = Pool(args.num_vgam_workers)
+    else:
+        pool = None
+
     def compute_metrics(eval_pred):
         step = trainer.state.global_step
         dump_writer.start_step_dump(step)
@@ -341,6 +347,7 @@ def main():
                 dump_writer=dump_writer,
                 dump_callback=dump_callback,
                 num_workers=args.num_vgam_workers,
+                pool=pool,
                 mask_vglm_errors=True,
                 suppress_vglm_output=True
             )
@@ -438,7 +445,13 @@ def main():
         trainer.add_callback(dump_writer_cb)
     if args.dump_initial_model is not None:
         trainer.save_model(training_args.output_dir + "/" + args.dump_initial_model)
-    trainer.train()
+
+    try:
+        trainer.train()
+    finally:
+        if pool:
+            pool.terminate()
+            pool.join()
 
 
 if __name__ == "__main__":
