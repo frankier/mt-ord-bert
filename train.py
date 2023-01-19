@@ -6,6 +6,7 @@ from typing import Optional
 import evaluate
 import numpy as np
 import torch
+from torch.optim.lr_scheduler import LambdaLR
 from torch.multiprocessing import Pool
 from transformers import (
     HfArgumentParser,
@@ -61,6 +62,7 @@ class ExtraArguments:
     initial_probe: bool = False
     initial_probe_lr: Optional[float] = None
     initial_probe_steps: Optional[float] = None
+    scale_lr_multiplier: Optional[float] = None
 
 
 def prepare_dataset_for_fast_inference(dataset, label_names, sort=False):
@@ -112,6 +114,34 @@ def init_weights(training_args, args, model, tokenizer, train_dataset, eval_data
             param.requires_grad = True
 
 
+def get_mono_optimizers(model, training_args, extra_args):
+    from transformers.optimization import get_scheduler
+
+    if training_args.weight_decay > 0:
+        raise ValueError("Weight decay not supported for monotonic regression")
+    optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(training_args)
+    lr = optimizer_kwargs["lr"]
+    optimizer = optimizer_cls([
+        {
+            "params": model.shared_parameters(),
+            "lr": lr
+        },
+        {
+            "params": model.scales.parameters(),
+            "lr": lr * extra_args.scale_lr_multiplier
+        }
+    ], **optimizer_kwargs)
+    linear_scheduler = get_scheduler(
+        training_args.lr_scheduler_type,
+        optimizer=optimizer,
+        num_warmup_steps=training_args.get_warmup_steps(training_args.max_steps),
+        num_training_steps=training_args.max_steps,
+    )
+    linear_scheduler.lr_lambdas[0]
+    scheduler = LambdaLR(optimizer, [linear_scheduler.lr_lambdas[0], lambda x: 1.0])
+    return optimizer, scheduler
+
+
 def main():
     torch.backends.cuda.matmul.allow_tf32 = True
     parser = HfArgumentParser((TrainingArguments, ExtraArguments))
@@ -151,6 +181,8 @@ def main():
         torch.set_num_threads(1)
     else:
         base_model = "bert-base-cased"
+
+    optimizers = (None, None)
 
     if isinstance(num_labels, int):
         label_names = ["labels"]
@@ -240,6 +272,9 @@ def main():
             #model.init_scales_range()
             def proc_logits(logits):
                 return logits
+
+            if args.scale_lr_multiplier is not None:
+                optimizers = get_mono_optimizers(model, training_args, args)
         elif args.model == "latent_softmax":
             from bert_ordinal.ordinal_models.experimental import BertForWithLatentAndSoftMax
             with silence_warnings():
@@ -413,7 +448,8 @@ def main():
             eval_dataset=eval_test_dataset,
             compute_metrics=compute_metrics,
             preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-            tokenizer=tokenizer
+            tokenizer=tokenizer,
+            optimizers=optimizers
         )
     else:
         if args.sampler == "default":
@@ -425,7 +461,8 @@ def main():
                 eval_dataset=eval_test_dataset,
                 compute_metrics=compute_metrics,
                 preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-                tokenizer=tokenizer
+                tokenizer=tokenizer,
+                optimizers=optimizers
             )
         else:
             from bert_ordinal.ordinal_models.experimental import CustomSamplerTrainer
@@ -437,7 +474,8 @@ def main():
                 eval_dataset=eval_test_dataset,
                 compute_metrics=compute_metrics,
                 preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-                tokenizer=tokenizer
+                tokenizer=tokenizer,
+                optimizers=optimizers
             )
     if args.dump_results:
         dump_writer_cb = DumpWriterCallback(args.dump_results, zip_with=relpath(args.dataset, args.dump_results))
