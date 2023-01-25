@@ -63,6 +63,7 @@ class ExtraArguments:
     initial_probe_lr: Optional[float] = None
     initial_probe_steps: Optional[float] = None
     scale_lr_multiplier: Optional[float] = None
+    use_bert_large_wholeword: bool = False
 
 
 def prepare_dataset_for_fast_inference(dataset, label_names, sort=False):
@@ -179,6 +180,8 @@ def main():
     if args.smoke:
         base_model = "prajjwal1/bert-tiny"
         torch.set_num_threads(1)
+    elif args.use_bert_large_wholeword:
+        base_model = "bert-large-cased-whole-word-masking"
     else:
         base_model = "bert-base-cased"
 
