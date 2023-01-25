@@ -18,7 +18,7 @@ from os.path import join as pjoin
 from bert_ordinal import Trainer
 from bert_ordinal.datasets import load_from_disk_with_labels
 from bert_ordinal.dump import DumpWriterCallback
-from bert_ordinal.eval import evaluate_pred_dist_avgs, evaluate_predictions
+from bert_ordinal.eval import evaluate_pred_dist_avgs, evaluate_predictions, add_bests
 from bert_ordinal.element_link import link_registry
 from bert_ordinal.label_dist import PRED_AVGS, summarize_label_dists, summarize_label_dist, clip_predictions_np
 from bert_ordinal.transformers_utils import silence_warnings
@@ -421,7 +421,8 @@ def main():
             summarized_label_dists = dict(zip(PRED_AVGS, pred_label_dists[2:]))
             if args.dump_results:
                 dump_writer.add_info_full("test", hidden=hiddens.squeeze(-1), **{"pred/" + k: v for k, v in summarized_label_dists.items()})
-            res =  evaluate_pred_dist_avgs(summarized_label_dists, labels, batch_num_labels, task_ids)
+            res = evaluate_pred_dist_avgs(summarized_label_dists, labels, batch_num_labels, task_ids)
+        add_bests(res)
         dump_writer.finish_step_dump(model)
         return res
 
