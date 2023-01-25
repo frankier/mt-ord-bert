@@ -15,6 +15,7 @@ SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 class ModelConfig:
     link: str
     discrimination_mode: Optional[str] = None
+    config: Optional[dict] = None
 
     def name(self):
         if self.discrimination_mode:
@@ -22,14 +23,34 @@ class ModelConfig:
         else:
             return self.link
 
+    def get_config(self):
+        if self.config is not None:
+            res = self.config
+        else:
+            res = {}
+        if self.discrimination_mode is not None:
+            res["discrimination_mode"] = self.discrimination_mode
+        return res
+
+
+MONO_CONFIG = {
+    "scale_lr_multiplier": 2,
+    "pilot_train_init": True
+}
+
+REGRESS_CONFIG = {
+    "pilot_quantiles": True,
+}
+
+
 ALL_MUTISCALE_MODELS = [
     ModelConfig("class"),
-    ModelConfig("regress"),
-    ModelConfig("regress_l1"),
-    ModelConfig("regress_adjust_l1"),
-    ModelConfig("mono_regress"),
-    ModelConfig("mono_regress_l1"),
-    ModelConfig("mono_regress_adjust_l1"),
+    ModelConfig("regress", config=REGRESS_CONFIG),
+    ModelConfig("regress_l1", config=REGRESS_CONFIG),
+    ModelConfig("regress_adjust_l1", config=REGRESS_CONFIG),
+    ModelConfig("mono_regress", config=MONO_CONFIG),
+    ModelConfig("mono_regress_l1", config=MONO_CONFIG),
+    ModelConfig("mono_regress_adjust_l1", config=MONO_CONFIG),
     ModelConfig("latent_softmax"),
     ModelConfig("threshold"),
     ModelConfig("fixed_threshold"),
@@ -52,6 +73,7 @@ ALL_SINGLE_SCALE_MODELS = [
 
 MODELS = {
     "rt": ALL_MUTISCALE_MODELS,
+    "rt_cxc_1k": ALL_MUTISCALE_MODELS,
     "rt_one": ALL_SINGLE_SCALE_MODELS,
     "rt_irr5": ALL_MUTISCALE_MODELS,
 }
@@ -61,11 +83,11 @@ JOB_TMPL = {
     "evaluation_strategy": "steps",
     "logging_strategy": "steps",
     "report_to": "wandb",
-    "dataloader_num_workers": 8,
+    "dataloader_num_workers": 16,
     "per_device_train_batch_size": 32,
     "per_device_eval_batch_size": 32,
-    "num_dataset_proc": 8,
     "logging_first_step": True,
+    "num_vgam_workers": 32,
 }
 
 DATA_JOB_TMPL = {
@@ -76,7 +98,16 @@ DATA_JOB_TMPL = {
         "max_steps": 3000,
         "eval_steps": 100,
         "logging_steps": 100,
-        "save_steps": 100,
+        "save_steps": 3000,
+    },
+    "rt_cxc_1k": {
+        "lr_scheduler_type": "linear",
+        "learning_rate": 1e-5,
+        "warmup_ratio": 0.1,
+        "eval_steps": 1000,
+        "logging_steps": 1000,
+        "save_steps": 1000,
+        "use_bert_large_wholeword": True,
     },
     "rt_irr5": {
         "lr_scheduler_type": "linear",
@@ -112,7 +143,7 @@ SLURM_TMPL = Template("""#!/bin/bash
 #SBATCH --gres=gpu:a100:1,nvme:500
 #SBATCH --partition=gpusmall
 #SBATCH --account=project_2004993
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=32
 #SBATCH --output=$logdir/$expcomb-%j.out
 
 set -euo pipefail
@@ -160,6 +191,8 @@ def main():
         last_bit = dataset.rsplit("_", 1)[-1]
         if last_bit.endswith("pct"):
             orig_dataset = dataset.rsplit("_", 1)[0]
+        else:
+            orig_dataset = dataset
         for model_config in MODELS[orig_dataset]:
             if args.model and model_config.name() not in args.model:
                 continue
@@ -177,9 +210,11 @@ def main():
                 "output_dir": log_dir,
                 "dump_results": dump_dir,
             }
-            config["discrimination_mode"] = model_config.discrimination_mode
+            config.update(model_config.get_config())
             dump_json(config, conf_json_path)
-            if orig_dataset in ("rt_one", "rt_irr5"):
+            if orig_dataset == "rt_cxc_1k":
+                time = "16:00:00"
+            elif orig_dataset in ("rt_one", "rt_irr5"):
                 time = "1:00:00"
             else:
                 time = "2:00:00"
