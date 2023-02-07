@@ -65,6 +65,7 @@ class ExtraArguments:
     initial_probe_steps: Optional[float] = None
     scale_lr_multiplier: Optional[float] = None
     use_bert_large_wholeword: bool = False
+    no_loss_scale: bool = False
 
 
 def prepare_dataset_for_fast_inference(dataset, label_names, sort=False):
@@ -112,6 +113,8 @@ def init_weights(training_args, args, model_conf, model, tokenizer, dataset):
         linear_probe_trainer.train()
         for param in model.bert.parameters():
             param.requires_grad = True
+    if not args.no_loss_scale and model_conf["has_continuous_output"]:
+        model.init_loss_scaling(dataset["train"])
 
 
 def get_mono_optimizers(model, training_args, extra_args):
